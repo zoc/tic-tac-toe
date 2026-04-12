@@ -12,7 +12,9 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Win/loss/draw detection — Validated in Phase 1: Rust Game Engine
+- [x] Computer opponent (O) with beatable AI — Validated in Phase 1: Rust Game Engine
+- [x] Human plays as X, always goes first — Validated in Phase 1: Rust Game Engine
 
 ### Active
 
@@ -52,8 +54,8 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
 | Rust + wasm-pack for WASM compilation | Mature toolchain, wasm-bindgen for JS interop | — Pending |
-| Beatable AI via imperfect minimax | Perfect play is frustrating; occasional mistakes make it fun | — Pending |
-| Human always X, goes first | Simplifies UX — no pregame choice needed | — Pending |
+| Beatable AI via imperfect minimax | Perfect play is frustrating; occasional mistakes make it fun | Validated Phase 1 — 25% mistake rate, minimax with depth scoring |
+| Human always X, goes first | Simplifies UX — no pregame choice needed | Validated Phase 1 — X starts, turn alternation enforced |
 | Score tracking across games | Adds replayability without complexity | — Pending |
 
 ## Evolution
@@ -74,4 +76,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after initialization*
+*Last updated: 2026-04-12 after Phase 1 completion*
