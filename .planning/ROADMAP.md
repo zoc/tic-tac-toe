@@ -41,7 +41,7 @@ Plans:
   3. All game operations (make move, get board state, get game status, computer move, reset) are callable from JavaScript through the exported API
 **Plans:** 1 plan
 Plans:
-- [ ] 02-01-PLAN.md — WASM dependencies, wasm_bindgen API surface, and browser test page
+- [x] 02-01-PLAN.md — WASM dependencies, wasm_bindgen API surface, and browser test page
 
 ### Phase 3: Browser Game
 **Goal**: A human can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with clear visual feedback, score tracking, and responsive layout
