@@ -27,7 +27,9 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. AI opponent generates a valid move for any non-terminal board state
   3. AI is beatable — running 100 automated games produces at least some human wins (mistake injection works)
   4. AI never makes an illegal move (never places on an occupied cell, never moves when game is over)
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 01-01-PLAN.md — Board state, move validation, win/draw detection, beatable AI, and comprehensive tests
 
 ### Phase 2: WASM Bridge
 **Goal**: The Rust game engine compiles to a WebAssembly module via wasm-pack, producing a `pkg/` directory with `.wasm` binary and JS/TS glue that can be imported by a browser application
