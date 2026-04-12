@@ -1,5 +1,5 @@
 use crate::board::{Game, GameStatus, Player};
-use rand::Rng;
+use rand::RngExt;
 
 /// Probability that the AI makes a random move instead of the optimal one.
 const MISTAKE_RATE: f64 = 0.25;
@@ -26,11 +26,11 @@ pub fn get_computer_move(game: &Game) -> Option<usize> {
         return None;
     }
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // With MISTAKE_RATE probability, pick a random empty cell
-    if rng.gen_bool(MISTAKE_RATE) {
-        return Some(empty[rng.gen_range(0..empty.len())]);
+    if rng.random_bool(MISTAKE_RATE) {
+        return Some(empty[rng.random_range(0..empty.len())]);
     }
 
     // Otherwise, run minimax to find the optimal move
@@ -209,7 +209,7 @@ mod tests {
 
     #[test]
     fn test_ai_100_games_all_valid() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..100 {
             let mut game = Game::new();
             loop {
@@ -230,7 +230,7 @@ mod tests {
                     if empty.is_empty() {
                         break;
                     }
-                    let pos = empty[rng.gen_range(0..empty.len())];
+                    let pos = empty[rng.random_range(0..empty.len())];
                     game.make_move(pos).unwrap();
                 } else {
                     // AI plays
@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_ai_beatable_in_100_games() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut human_wins = 0;
         for _ in 0..100 {
             let mut game = Game::new();
@@ -273,7 +273,7 @@ mod tests {
                     if empty.is_empty() {
                         break;
                     }
-                    let pos = empty[rng.gen_range(0..empty.len())];
+                    let pos = empty[rng.random_range(0..empty.len())];
                     game.make_move(pos).unwrap();
                 } else {
                     let mv = get_computer_move(&game).unwrap();
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_ai_never_illegal_move() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for _ in 0..100 {
             let mut game = Game::new();
             loop {
@@ -316,7 +316,7 @@ mod tests {
                     if empty.is_empty() {
                         break;
                     }
-                    let pos = empty[rng.gen_range(0..empty.len())];
+                    let pos = empty[rng.random_range(0..empty.len())];
                     game.make_move(pos).unwrap();
                 } else {
                     let mv = get_computer_move(&game);
