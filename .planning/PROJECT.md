@@ -18,7 +18,7 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ### Active
 
-- [ ] Rust game engine compiled to WebAssembly
+- [x] Rust game engine compiled to WebAssembly — Validated in Phase 2: WASM Bridge
 - [ ] 3x3 grid rendered in the browser
 - [ ] Human plays as X, always goes first
 - [ ] Computer opponent (O) with beatable AI
@@ -53,7 +53,7 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Rust + wasm-pack for WASM compilation | Mature toolchain, wasm-bindgen for JS interop | — Pending |
+| Rust + wasm-pack for WASM compilation | Mature toolchain, wasm-bindgen for JS interop | Validated Phase 2 — 33KB .wasm binary, scalar-type boundary, all ops exported |
 | Beatable AI via imperfect minimax | Perfect play is frustrating; occasional mistakes make it fun | Validated Phase 1 — 25% mistake rate, minimax with depth scoring |
 | Human always X, goes first | Simplifies UX — no pregame choice needed | Validated Phase 1 — X starts, turn alternation enforced |
 | Score tracking across games | Adds replayability without complexity | — Pending |
@@ -76,4 +76,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after Phase 1 completion*
+*Last updated: 2026-04-12 after Phase 2 completion*
