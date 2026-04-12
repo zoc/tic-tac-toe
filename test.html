@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe WASM Test</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #e0e0e0; }
+        .pass { color: #4caf50; }
+        .fail { color: #f44336; }
+        .info { color: #64b5f6; }
+        pre { background: #16213e; padding: 12px; border-radius: 4px; overflow-x: auto; }
+        h1 { color: #e94560; }
+        h2 { color: #0f3460; background: #e94560; display: inline-block; padding: 2px 8px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>Tic-Tac-Toe WASM Bridge Test</h1>
+    <div id="output"></div>
+
+    <script type="module">
+        import init, { WasmGame } from './pkg/tic_tac_toe.js';
+
+        const out = document.getElementById('output');
+        function log(msg, cls = 'info') {
+            const p = document.createElement('pre');
+            p.className = cls;
+            p.textContent = msg;
+            out.appendChild(p);
+        }
+
+        let passed = 0;
+        let failed = 0;
+
+        function assert(condition, name) {
+            if (condition) {
+                log(`✓ PASS: ${name}`, 'pass');
+                passed++;
+            } else {
+                log(`✗ FAIL: ${name}`, 'fail');
+                failed++;
+            }
+        }
+
+        try {
+            await init();
+            log('WASM module loaded successfully');
+
+            // Test 1: Create new game
+            const game = new WasmGame();
+            assert(game !== null && game !== undefined, 'WasmGame constructor works');
+
+            // Test 2: Initial board state (all zeros = empty)
+            const board = game.get_board();
+            assert(board.length === 9, 'Board has 9 cells');
+            assert(Array.from(board).every(c => c === 0), 'New board is all empty (0)');
+
+            // Test 3: Current player starts as X (1)
+            assert(game.current_player() === 1, 'X (1) goes first');
+
+            // Test 4: Game status is "playing"
+            assert(game.get_status() === 'playing', 'Initial status is "playing"');
+
+            // Test 5: Make a valid move
+            const moveOk = game.make_move(4); // X plays center
+            assert(moveOk === true, 'make_move(4) returns true');
+
+            // Test 6: Board updated after move
+            const board2 = game.get_board();
+            assert(board2[4] === 1, 'Cell 4 is now X (1)');
+
+            // Test 7: Player switched to O
+            assert(game.current_player() === 2, 'Current player is now O (2)');
+
+            // Test 8: Computer makes a move
+            const compPos = game.computer_move();
+            assert(compPos >= 0 && compPos <= 8, `Computer chose position ${compPos} (0-8)`);
+            const board3 = game.get_board();
+            assert(board3[compPos] === 2, `Cell ${compPos} is now O (2)`);
+
+            // Test 9: Player back to X after computer move
+            assert(game.current_player() === 1, 'Back to X after computer move');
+
+            // Test 10: Invalid move (occupied cell) returns false
+            const badMove = game.make_move(4); // cell 4 already has X
+            assert(badMove === false, 'make_move on occupied cell returns false');
+
+            // Test 11: Reset works
+            game.reset();
+            const board4 = game.get_board();
+            assert(Array.from(board4).every(c => c === 0), 'Board is empty after reset');
+            assert(game.current_player() === 1, 'X goes first after reset');
+            assert(game.get_status() === 'playing', 'Status is "playing" after reset');
+
+            // Test 12: Play a full game to win
+            // X wins with top row: X(0), O(3), X(1), O(4), X(2)
+            game.make_move(0); // X at 0
+            game.make_move(3); // O at 3
+            game.make_move(1); // X at 1
+            game.make_move(4); // O at 4
+            game.make_move(2); // X at 2 — wins!
+            assert(game.get_status() === 'won', 'Game detects win');
+            assert(game.get_winner() === 1, 'Winner is X (1)');
+            const winPos = game.get_winning_positions();
+            assert(winPos.length === 3, 'Winning positions has 3 elements');
+            assert(winPos[0] === 0 && winPos[1] === 1 && winPos[2] === 2, 'Winning line is [0,1,2]');
+
+            // Test 13: computer_move returns 255 when game is over
+            const noMove = game.computer_move();
+            assert(noMove === 255, 'computer_move returns 255 when game over');
+
+            // Summary
+            log(`\n═══ Results: ${passed} passed, ${failed} failed ═══`, failed > 0 ? 'fail' : 'pass');
+
+        } catch (e) {
+            log(`FATAL ERROR: ${e.message}\n${e.stack}`, 'fail');
+        }
+    </script>
+</body>
+</html>
