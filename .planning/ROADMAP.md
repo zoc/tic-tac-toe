@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. AI never makes an illegal move (never places on an occupied cell, never moves when game is over)
 **Plans:** 1 plan
 Plans:
-- [ ] 01-01-PLAN.md — Board state, move validation, win/draw detection, beatable AI, and comprehensive tests
+- [x] 01-01-PLAN.md — Board state, move validation, win/draw detection, beatable AI, and comprehensive tests
 
 ### Phase 2: WASM Bridge
 **Goal**: The Rust game engine compiles to a WebAssembly module via wasm-pack, producing a `pkg/` directory with `.wasm` binary and JS/TS glue that can be imported by a browser application

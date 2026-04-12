@@ -11,13 +11,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **ENG-01**: Game logic is written in Rust and compiled to WebAssembly via wasm-pack
 - [ ] **ENG-02**: User can click a cell and see their X piece placed on the board
-- [ ] **ENG-03**: Game detects win, loss, and draw conditions after each move
-- [ ] **ENG-04**: User cannot place a piece on an already-occupied cell
+- [x] **ENG-03**: Game detects win, loss, and draw conditions after each move
+- [x] **ENG-04**: User cannot place a piece on an already-occupied cell
 
 ### AI Opponent
 
-- [ ] **AI-01**: Computer plays as O and makes a move after each human turn
-- [ ] **AI-02**: Computer uses imperfect minimax — plays well but makes occasional mistakes so the human can win
+- [x] **AI-01**: Computer plays as O and makes a move after each human turn
+- [x] **AI-02**: Computer uses imperfect minimax — plays well but makes occasional mistakes so the human can win
 
 ### User Interface
 
@@ -69,10 +69,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | ENG-01 | Phase 2 | Pending |
 | ENG-02 | Phase 3 | Pending |
-| ENG-03 | Phase 1 | Pending |
-| ENG-04 | Phase 1 | Pending |
-| AI-01 | Phase 1 | Pending |
-| AI-02 | Phase 1 | Pending |
+| ENG-03 | Phase 1 | Complete |
+| ENG-04 | Phase 1 | Complete |
+| AI-01 | Phase 1 | Complete |
+| AI-02 | Phase 1 | Complete |
 | UI-01 | Phase 3 | Pending |
 | UI-02 | Phase 3 | Pending |
 | UI-03 | Phase 3 | Pending |
