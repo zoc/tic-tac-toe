@@ -75,3 +75,26 @@ A complete browser-based tic-tac-toe game: Rust game engine compiled to WebAssem
 ---
 
 *Written: 2026-04-13*
+
+---
+
+## Cross-Milestone Trends
+
+*Updated after each milestone. Patterns that persist across multiple milestones.*
+
+### Velocity
+
+| Milestone | Phases | Plans | LOC | Duration | Commits |
+|-----------|--------|-------|-----|----------|---------|
+| v1.0 MVP | 3 | 3 | ~1,373 | 2 days | 44 |
+
+### What Consistently Works
+
+- Bottom-up phased approach (logic → bridge → UI) keeps each phase independently testable
+- Code review after UI phases consistently finds XSS, a11y, and hover-state bugs
+
+### Watch Out For
+
+- CSS Grid: always set `grid-template-rows` AND `grid-template-columns` for square grids
+- Vite 8+: use `build.target: 'esnext'` instead of `vite-plugin-top-level-await`
+- Requirements traceability: mark requirements Complete during phase execution, not after
