@@ -8,6 +8,18 @@ A browser-based tic-tac-toe game where a human player (X) plays against a comput
 
 The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
 
+## Current Milestone: v1.1 Polish & Feel
+
+**Goal:** Elevate the v1.0 game with smooth animations, persistence, sound, and system dark mode — making it feel like a finished product.
+
+**Target features:**
+- Smooth CSS animations for piece placement and board transitions
+- Animated win line through the three winning cells
+- Computer "thinking" delay (300–800ms) before making a move
+- Persistent scores via localStorage across page refresh
+- Sound effects for moves and game outcomes with mute toggle
+- Dark mode support respecting prefers-color-scheme
+
 ## Requirements
 
 ### Validated
@@ -27,14 +39,14 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ### Active
 
-<!-- Next milestone candidates — will be scoped in /gsd-new-milestone -->
+<!-- Current milestone v1.1 scope -->
 
-- [ ] Smooth CSS animations for piece placement and board transitions (v2 candidate)
-- [ ] Animated win line through the three winning cells (v2 candidate)
-- [ ] Computer "thinking" delay (300-800ms) before making a move (v2 candidate)
-- [ ] Persistent scores via localStorage across page refresh (v2 candidate)
-- [ ] Sound effects for moves and game outcomes with mute toggle (v2 candidate)
-- [ ] Dark mode support respecting prefers-color-scheme (v2 candidate)
+- [ ] Smooth CSS animations for piece placement and board transitions
+- [ ] Animated win line through the three winning cells
+- [ ] Computer "thinking" delay (300–800ms) before making a move
+- [ ] Persistent scores via localStorage across page refresh
+- [ ] Sound effects for moves and game outcomes with mute toggle
+- [ ] Dark mode support respecting prefers-color-scheme
 
 ### Out of Scope
 
@@ -105,4 +117,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 — Milestone v1.0 complete (full evolution review)*
+*Last updated: 2026-04-13 — Milestone v1.1 Polish & Feel started*

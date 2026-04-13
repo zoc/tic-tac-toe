@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: MVP
-status: milestone_complete
-stopped_at: Milestone v1.0 complete — archived, retrospective updated, tag pending
-last_updated: "2026-04-13T18:30:00.000Z"
+milestone: v1.1
+milestone_name: Polish & Feel
+status: defining_requirements
+stopped_at: Milestone v1.1 started — defining requirements
+last_updated: "2026-04-13T00:00:00.000Z"
 last_activity: 2026-04-13
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,26 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-13)
 
 **Core value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser
-**Current focus:** Planning next milestone
+**Current focus:** Defining requirements
 
 ## Current Position
 
-Phase: —
+Phase: Not started (defining requirements)
 Plan: —
-Status: Milestone v1.0 complete — planning next milestone
-Last activity: 2026-04-13
+Status: Defining requirements
+Last activity: 2026-04-13 — Milestone v1.1 started
 
-Progress: [██████████] 100%
-
-## Performance Metrics
-
-**v1.0 Summary:**
-
-- Total plans completed: 3
-- Total phases: 3
-- Duration: 2 days (2026-04-12 → 2026-04-13)
-- LOC: ~1,373 (927 Rust + 446 HTML/CSS/JS)
-- Commits: 44
+Progress: [░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
@@ -54,9 +44,9 @@ None.
 
 ### Blockers/Concerns
 
-None — milestone v1.0 complete.
+None — clean slate for v1.1.
 
 ## Session Continuity
 
-Last session: 2026-04-13T18:30:00.000Z
-Stopped at: Milestone v1.0 complete — archived and ready for /gsd-new-milestone
+Last session: 2026-04-13T00:00:00.000Z
+Stopped at: Milestone v1.1 started — requirements and roadmap pending
