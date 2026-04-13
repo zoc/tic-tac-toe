@@ -191,10 +191,13 @@ async function main() {
 }
 
 main().catch(err => {
-  // Graceful error display if WASM fails to load
-  document.body.innerHTML = `
-    <div style="color:#e94560;padding:40px;font-family:monospace;background:#1a1a2e;min-height:100vh">
-      <h2>Failed to load game</h2>
-      <pre>${err.message}</pre>
-    </div>`;
+  // Graceful error display if WASM fails to load — build DOM imperatively to avoid XSS
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'color:#e94560;padding:40px;font-family:monospace;background:#1a1a2e;min-height:100vh';
+  const heading = document.createElement('h2');
+  heading.textContent = 'Failed to load game';
+  const pre = document.createElement('pre');
+  pre.textContent = err.message;          // safe: textContent, never innerHTML
+  wrapper.append(heading, pre);
+  document.body.replaceChildren(wrapper);
 });
