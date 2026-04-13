@@ -71,14 +71,11 @@ function clearWinLine() {
 // ─── Game state ───────────────────────────────────────────────────────────────
 let game;              // WasmGame instance — created after init()
 let isProcessing = false; // guard against double-click during computer move
+let thinkingTimer = null; // cancelable thinking delay timer ID (FEEL-02)
 
-// ─── Computer thinking delay ──────────────────────────────────────────────────
+// ─── Computer thinking delay constants ───────────────────────────────────────
 const THINK_MIN = 300;
 const THINK_MAX = 800;
-function thinkDelay() {
-  const ms = THINK_MIN + Math.random() * (THINK_MAX - THINK_MIN);
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 // ─── Render: draw the full board from WASM state ─────────────────────────────
 function renderBoard(winningPositions = []) {
@@ -215,8 +212,19 @@ async function handleCellClick(event) {
   boardEl.classList.add('board--disabled');
   setStatus("Computer's turn", 'computer-turn');  // UI-02
 
-  // Artificial thinking delay — makes the computer feel responsive, not instant
-  await thinkDelay();
+  // Artificial thinking delay (FEEL-01) — randomized 300–800ms pause
+  const delayMs = THINK_MIN + Math.random() * (THINK_MAX - THINK_MIN);
+  await new Promise(resolve => {
+    thinkingTimer = setTimeout(resolve, delayMs);
+  });
+  thinkingTimer = null;
+
+  // FEEL-02: Guard — game may have been reset during the delay
+  if (game.get_status() !== 'playing') {
+    isProcessing = false;
+    boardEl.classList.remove('board--disabled');
+    return;
+  }
 
   const compPos = game.computer_move();
 
@@ -245,6 +253,12 @@ async function handleCellClick(event) {
 
 // ─── Reset game (UI-04) ───────────────────────────────────────────────────────
 function resetGame() {
+  // Cancel any pending computer thinking delay (FEEL-02)
+  if (thinkingTimer !== null) {
+    clearTimeout(thinkingTimer);
+    thinkingTimer = null;
+    isProcessing = false;
+  }
   game.reset();
   isProcessing = false;
   boardEl.classList.remove('board--disabled');
