@@ -78,7 +78,10 @@ Plans:
   3. User clicks the mute button and all subsequent sounds are silent — no audio plays until unmuted
   4. User who mutes, refreshes the page, and plays a move hears no sound — mute preference was saved
   5. User on first page load can click any cell and hear sound (no silent first click from autoplay policy)
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 07-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented sound effects and mute toggle
 
 ### Phase 8: Animated Win Line
 **Goal**: Winning feels theatrical — a line draws itself through the three winning cells
