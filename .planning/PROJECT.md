@@ -41,12 +41,12 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 <!-- Current milestone v1.1 scope -->
 
-- [ ] Smooth CSS animations for piece placement and board transitions
-- [ ] Animated win line through the three winning cells
-- [ ] Computer "thinking" delay (300–800ms) before making a move
-- [ ] Persistent scores via localStorage across page refresh
-- [ ] Sound effects for moves and game outcomes with mute toggle
-- [ ] Dark mode support respecting prefers-color-scheme
+  - [x] Smooth CSS animations for piece placement and board transitions — Validated in Phase 04: css-piece-animations
+  - [x] Animated win line through the three winning cells — Validated in Phase 04: css-piece-animations
+  - [x] Computer "thinking" delay (300–800ms) before making a move — Validated in Phase 06: thinking-delay
+  - [ ] Persistent scores via localStorage across page refresh
+  - [ ] Sound effects for moves and game outcomes with mute toggle
+  - [ ] Dark mode support respecting prefers-color-scheme
 
 ### Out of Scope
 
@@ -87,6 +87,8 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ## Current State
 
+**Phase 06 complete** (2026-04-13). Cancelable thinking delay delivered — `thinkingTimer` clearTimeout pattern, post-delay `get_status()` guard, FEEL-01 and FEEL-02 human-verified.
+
 **Milestone v1.0 complete** (2026-04-13). Full playable tic-tac-toe in the browser:
 - Vite 8 dev server and production build
 - Dark navy/red UI, responsive CSS Grid board
@@ -117,4 +119,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 — Milestone v1.1 Polish & Feel started*
+*Last updated: 2026-04-13 — Phase 06 thinking-delay complete*
