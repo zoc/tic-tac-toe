@@ -18,7 +18,7 @@
 
 ### v1.1 Polish & Feel
 
-- [ ] **Phase 4: CSS Foundation & Persistence** — Dark mode + persistent scores (lowest risk)
+- [x] **Phase 4: CSS Foundation & Persistence** — Dark mode + persistent scores (lowest risk) (completed 2026-04-13)
 - [ ] **Phase 5: CSS Piece Animations** — Pop-in animation on X/O placement
 - [ ] **Phase 6: Thinking Delay** — Computer pause before moving (async refactor)
 - [ ] **Phase 7: Sound Effects & Mute** — Web Audio synthesized tones + mute toggle
@@ -39,7 +39,7 @@
 **UI hint**: yes
 
 Plans:
-- [ ] 04-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented theming and persistence
+- [x] 04-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented theming and persistence
 
 ### Phase 5: CSS Piece Animations
 **Goal**: Piece placement feels responsive and tactile with pop-in animation
@@ -93,7 +93,7 @@ Plans:
 | 1. Rust Game Engine | v1.0 | 1/1 | Complete | 2026-04-12 |
 | 2. WASM Bridge | v1.0 | 1/1 | Complete | 2026-04-12 |
 | 3. Browser Game | v1.0 | 1/1 | Complete | 2026-04-13 |
-| 4. CSS Foundation & Persistence | v1.1 | 0/1 | Planned | - |
+| 4. CSS Foundation & Persistence | v1.1 | 1/1 | Complete   | 2026-04-13 |
 | 5. CSS Piece Animations | v1.1 | 0/? | Not started | - |
 | 6. Thinking Delay | v1.1 | 0/? | Not started | - |
 | 7. Sound Effects & Mute | v1.1 | 0/? | Not started | - |

@@ -19,8 +19,8 @@
 
 ### Persistence
 
-- [ ] **PERS-01**: Score totals (wins/losses/draws) persist across page refresh via localStorage
-- [ ] **PERS-02**: Score persistence degrades gracefully in private/incognito mode (no crash)
+- [x] **PERS-01**: Score totals (wins/losses/draws) persist across page refresh via localStorage
+- [x] **PERS-02**: Score persistence degrades gracefully in private/incognito mode (no crash)
 
 ### Audio
 
@@ -34,8 +34,8 @@
 
 ### Theming
 
-- [ ] **THEM-01**: The UI adapts to the user's OS light/dark mode preference automatically (`prefers-color-scheme`)
-- [ ] **THEM-02**: No flash of unstyled content — theme applies via CSS only, no JS
+- [x] **THEM-01**: The UI adapts to the user's OS light/dark mode preference automatically (`prefers-color-scheme`)
+- [x] **THEM-02**: No flash of unstyled content — theme applies via CSS only, no JS
 
 ## Future Requirements
 
@@ -58,10 +58,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| THEM-01 | Phase 4 — CSS Foundation & Persistence | Pending |
-| THEM-02 | Phase 4 — CSS Foundation & Persistence | Pending |
-| PERS-01 | Phase 4 — CSS Foundation & Persistence | Pending |
-| PERS-02 | Phase 4 — CSS Foundation & Persistence | Pending |
+| THEM-01 | Phase 4 — CSS Foundation & Persistence | Complete |
+| THEM-02 | Phase 4 — CSS Foundation & Persistence | Complete |
+| PERS-01 | Phase 4 — CSS Foundation & Persistence | Complete |
+| PERS-02 | Phase 4 — CSS Foundation & Persistence | Complete |
 | ANIM-01 | Phase 5 — CSS Piece Animations | Pending |
 | ANIM-03 | Phase 5 — CSS Piece Animations | Pending |
 | FEEL-01 | Phase 6 — Thinking Delay | Pending |
