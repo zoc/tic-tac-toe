@@ -8,7 +8,10 @@
 </head>
 <body>
   <div class="app">
-    <h1 class="title">Tic-Tac-Toe</h1>
+    <div class="title-row">
+      <h1 class="title">Tic-Tac-Toe</h1>
+      <button class="mute-btn" id="mute-btn" aria-label="Toggle sound" aria-pressed="false">🔊</button>
+    </div>
 
     <!-- Score board (SCORE-01) — in-memory, resets on page refresh -->
     <div class="scoreboard" aria-label="Score">
@@ -30,8 +33,12 @@
     <p class="status-message" id="status-message" aria-live="polite">Your turn</p>
 
     <!-- 3×3 game board (UI-01) — cells injected by JS -->
-    <div class="board" id="board" role="grid" aria-label="Tic-tac-toe board">
-      <!-- 9 .cell divs are created by main.js on init -->
+    <div class="board-wrapper">
+      <div class="board" id="board" role="grid" aria-label="Tic-tac-toe board">
+        <!-- 9 .cell divs are created by main.js on init -->
+      </div>
+      <!-- Win line overlay — sibling of .board so it survives boardEl.innerHTML='' -->
+      <div class="win-line" id="win-line" hidden aria-hidden="true"></div>
     </div>
 
     <!-- Restart button (UI-04) — hidden until game ends -->
