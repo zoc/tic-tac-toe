@@ -1,6 +1,6 @@
 # Milestones
 
-## v1.0 (Shipped: 2026-04-13)
+## v1.0 MVP (Shipped: 2026-04-13)
 
 **Phases completed:** 3 phases, 3 plans, ~1,373 LOC, 44 commits, 2 days
 

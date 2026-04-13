@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0
-milestone_name: milestone
+milestone_name: MVP
 status: milestone_complete
-stopped_at: Milestone v1.0 complete — retrospective written, tag pending
-last_updated: "2026-04-13T17:00:00.000Z"
+stopped_at: Milestone v1.0 complete — archived, retrospective updated, tag pending
+last_updated: "2026-04-13T18:30:00.000Z"
 last_activity: 2026-04-13
 progress:
   total_phases: 3
@@ -21,55 +21,32 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-13)
 
 **Core value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser
-**Current focus:** Phase 03 — browser-game — COMPLETE
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 03
-Plan: Not started
-Status: All phases complete — milestone v1.0 delivered
+Phase: —
+Plan: —
+Status: Milestone v1.0 complete — planning next milestone
 Last activity: 2026-04-13
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
-**Velocity:**
+**v1.0 Summary:**
 
-- Total plans completed: 4
-- Average duration: —
-- Total execution time: 0 hours
-
-**By Phase:**
-
-| Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 01 | 1 | - | - |
-| 02 | 1 | - | - |
-| 03 | 1 | - | - |
-
-**Recent Trend:**
-
-- Last 5 plans: —
-- Trend: —
-
-*Updated after each plan completion*
-| Phase 01 P01 | 4 | 2 tasks | 5 files |
-| Phase 03 P01 | ~20min | 5 tasks | 7 files |
+- Total plans completed: 3
+- Total phases: 3
+- Duration: 2 days (2026-04-12 → 2026-04-13)
+- LOC: ~1,373 (927 Rust + 446 HTML/CSS/JS)
+- Commits: 44
 
 ## Accumulated Context
 
 ### Decisions
 
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Roadmap]: 3-phase coarse structure — pure Rust engine → WASM bridge → browser frontend
-- [Roadmap]: All visual polish (animations, sound, dark mode) deferred to v2
-- [Phase 01]: Board uses flat [Option<Player>; 9] array with GameStatus::Won carrying winning positions
-- [Phase 01]: AI uses imperfect minimax with 25% flat mistake rate — tunable constant for later phases
-- [Phase 03]: vite-plugin-top-level-await incompatible with Vite 8 — replaced with build.target=esnext
-- [Phase 03]: grid-template-rows: repeat(3, 1fr) required alongside grid-template-columns for square cells
+All v1.0 decisions logged in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
@@ -77,9 +54,9 @@ None.
 
 ### Blockers/Concerns
 
-None — all phases complete.
+None — milestone v1.0 complete.
 
 ## Session Continuity
 
-Last session: 2026-04-13T17:00:00.000Z
-Stopped at: Milestone v1.0 complete — all artifacts updated, tag pending
+Last session: 2026-04-13T18:30:00.000Z
+Stopped at: Milestone v1.0 complete — archived and ready for /gsd-new-milestone

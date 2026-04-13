@@ -25,6 +25,17 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] XSS-safe error handling — Validated in Phase 3: Browser Game (code review fix)
 - [x] Hover suppressed during disabled board state — Validated in Phase 3: Browser Game (code review fix)
 
+### Active
+
+<!-- Next milestone candidates — will be scoped in /gsd-new-milestone -->
+
+- [ ] Smooth CSS animations for piece placement and board transitions (v2 candidate)
+- [ ] Animated win line through the three winning cells (v2 candidate)
+- [ ] Computer "thinking" delay (300-800ms) before making a move (v2 candidate)
+- [ ] Persistent scores via localStorage across page refresh (v2 candidate)
+- [ ] Sound effects for moves and game outcomes with mute toggle (v2 candidate)
+- [ ] Dark mode support respecting prefers-color-scheme (v2 candidate)
+
 ### Out of Scope
 
 - Multiplayer / two-human mode — single-player focus
@@ -32,7 +43,6 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - Mobile native app — web only
 - Difficulty selection — single beatable difficulty level
 - Player choosing X or O — human is always X
-- Animations / sound effects — deferred to v2
 
 ## Context
 
@@ -95,4 +105,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 — Milestone v1.0 complete*
+*Last updated: 2026-04-13 — Milestone v1.0 complete (full evolution review)*
