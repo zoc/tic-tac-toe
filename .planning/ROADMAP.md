@@ -49,8 +49,11 @@ Plans:
   1. When any X or O is placed, user sees it scale in from 0 with a brief pop/spring — not just appear
   2. Only the newly placed piece animates — existing pieces on the board do not re-animate
   3. User with `prefers-reduced-motion: reduce` set in their OS sees pieces appear instantly with no animation
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
+
+Plans:
+- [ ] 05-01-PLAN.md — Patch renderBoard() for incremental updates + human browser verification
 
 ### Phase 6: Thinking Delay
 **Goal**: The computer feels deliberate — it pauses before responding, like it's thinking
@@ -94,7 +97,7 @@ Plans:
 | 2. WASM Bridge | v1.0 | 1/1 | Complete | 2026-04-12 |
 | 3. Browser Game | v1.0 | 1/1 | Complete | 2026-04-13 |
 | 4. CSS Foundation & Persistence | v1.1 | 1/1 | Complete   | 2026-04-13 |
-| 5. CSS Piece Animations | v1.1 | 0/? | Not started | - |
+| 5. CSS Piece Animations | v1.1 | 0/1 | Not started | - |
 | 6. Thinking Delay | v1.1 | 0/? | Not started | - |
 | 7. Sound Effects & Mute | v1.1 | 0/? | Not started | - |
 | 8. Animated Win Line | v1.1 | 0/? | Not started | - |
