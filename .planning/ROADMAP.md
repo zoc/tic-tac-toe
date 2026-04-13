@@ -53,7 +53,9 @@ Plans:
   3. When a game ends, the user sees a clear outcome message ("You win!", "Computer wins!", "It's a draw!") and can start a new game via a restart button without refreshing the page
   4. A running score tally (wins, losses, draws) updates after each game and persists across multiple games in the same session
   5. The game is playable on both phone and desktop screens — grid and controls adapt to viewport size
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 03-01-PLAN.md — Vite scaffold, HTML/CSS/JS game frontend wired to WASM engine (all UI requirements)
 **UI hint**: yes
 
 ## Progress
@@ -63,6 +65,6 @@ Phases execute in numeric order: 1 → 2 → 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Rust Game Engine | 0/0 | Not started | - |
-| 2. WASM Bridge | 0/0 | Not started | - |
-| 3. Browser Game | 0/0 | Not started | - |
+| 1. Rust Game Engine | 1/1 | Complete | 2026-04-12 |
+| 2. WASM Bridge | 1/1 | Complete | 2026-04-12 |
+| 3. Browser Game | 0/1 | Planned | - |
