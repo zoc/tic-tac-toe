@@ -35,8 +35,11 @@
   2. User switching OS to dark mode and back sees the board adapt without a page reload
   3. User who refreshes the page after 5 wins still sees 5 wins in the scoreboard
   4. User in private/incognito mode can play normally — no crash or error when localStorage is unavailable
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
+
+Plans:
+- [ ] 04-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented theming and persistence
 
 ### Phase 5: CSS Piece Animations
 **Goal**: Piece placement feels responsive and tactile with pop-in animation
@@ -90,7 +93,7 @@
 | 1. Rust Game Engine | v1.0 | 1/1 | Complete | 2026-04-12 |
 | 2. WASM Bridge | v1.0 | 1/1 | Complete | 2026-04-12 |
 | 3. Browser Game | v1.0 | 1/1 | Complete | 2026-04-13 |
-| 4. CSS Foundation & Persistence | v1.1 | 0/? | Not started | - |
+| 4. CSS Foundation & Persistence | v1.1 | 0/1 | Planned | - |
 | 5. CSS Piece Animations | v1.1 | 0/? | Not started | - |
 | 6. Thinking Delay | v1.1 | 0/? | Not started | - |
 | 7. Sound Effects & Mute | v1.1 | 0/? | Not started | - |
