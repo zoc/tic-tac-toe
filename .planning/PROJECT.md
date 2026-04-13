@@ -19,13 +19,13 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 ### Active
 
 - [x] Rust game engine compiled to WebAssembly — Validated in Phase 2: WASM Bridge
-- [ ] 3x3 grid rendered in the browser
-- [ ] Human plays as X, always goes first
-- [ ] Computer opponent (O) with beatable AI
-- [ ] Win/loss/draw detection with visual highlighting
-- [ ] Score tracking across games (wins, losses, draws)
-- [ ] Polished UI — animations, colors, visual flair
-- [ ] New game / restart functionality
+- [x] 3x3 grid rendered in the browser — Validated in Phase 3: Browser Game
+- [x] Human plays as X, always goes first — Validated in Phase 3: Browser Game
+- [x] Computer opponent (O) with beatable AI — Validated in Phase 3: Browser Game
+- [x] Win/loss/draw detection with visual highlighting — Validated in Phase 3: Browser Game
+- [x] Score tracking across games (wins, losses, draws) — Validated in Phase 3: Browser Game
+- [x] Polished UI — dark navy/red theme, responsive grid, win highlight — Validated in Phase 3: Browser Game
+- [x] New game / restart functionality — Validated in Phase 3: Browser Game
 
 ### Out of Scope
 
@@ -56,7 +56,11 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 | Rust + wasm-pack for WASM compilation | Mature toolchain, wasm-bindgen for JS interop | Validated Phase 2 — 33KB .wasm binary, scalar-type boundary, all ops exported |
 | Beatable AI via imperfect minimax | Perfect play is frustrating; occasional mistakes make it fun | Validated Phase 1 — 25% mistake rate, minimax with depth scoring |
 | Human always X, goes first | Simplifies UX — no pregame choice needed | Validated Phase 1 — X starts, turn alternation enforced |
-| Score tracking across games | Adds replayability without complexity | — Pending |
+| Score tracking across games | Adds replayability without complexity | Validated Phase 3 — in-memory wins/losses/draws tally, resets on page refresh |
+
+## Current State
+
+Phase 3 complete — milestone v1.0 delivered. Full playable tic-tac-toe game in the browser: Vite dev server + production build, dark navy/red UI, responsive CSS Grid board, WASM-powered AI, win highlighting, score tracking, restart button. All 3 phases complete.
 
 ## Evolution
 
@@ -76,4 +80,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-12 after Phase 2 completion*
+*Last updated: 2026-04-13 after Phase 3 completion*
