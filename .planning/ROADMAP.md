@@ -63,7 +63,10 @@ Plans:
   1. After the human places a move, the computer's piece appears 300–800ms later (visibly delayed, not instant)
   2. The delay varies from game to game — not always the same pause length
   3. When the user clicks "New Game" mid-delay, the computer does not place a move on the new board — the pending move is cancelled cleanly
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 06-01-PLAN.md — Fix FEEL-02 timer cancellation + human verification of delay behaviour
 
 ### Phase 7: Sound Effects & Mute
 **Goal**: The game has synthesized audio feedback for all game events, with a persistent mute option
