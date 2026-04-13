@@ -92,8 +92,11 @@ Plans:
   2. The win line correctly overlays all three orientations: horizontal rows, vertical columns, and both diagonals
   3. The win line is gone when a new game starts — no residual line from the previous game
   4. On small viewports the win line stays visually aligned with the winning cells — not offset or misaligned
-**Plans**: TBD
+**Plans**: 1 plan
 **UI hint**: yes
+
+Plans:
+- [ ] 08-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented animated win line
 
 ## Progress
 
