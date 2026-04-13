@@ -128,6 +128,12 @@ html, body {
   background: #1e2a4a;  /* subtle hover on empty cells */
 }
 
+/* ─── Keyboard focus (LW-01) — visible focus ring for keyboard navigation ─── */
+.cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .cell--taken {
   cursor: default;
 }

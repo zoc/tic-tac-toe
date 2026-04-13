@@ -51,6 +51,9 @@ function renderBoard(winningPositions = []) {
       cell.setAttribute('aria-label', `O at position ${i + 1}`);
     } else {
       cell.setAttribute('aria-label', `Empty cell ${i + 1}`);
+      // Keyboard accessibility (LW-01): empty cells can receive focus and be activated
+      cell.tabIndex = 0;
+      cell.setAttribute('role', 'button');
     }
 
     if (winSet.has(i)) {
@@ -186,6 +189,14 @@ async function main() {
 
   // Single delegated click listener on board — handles all 9 cells (UI-01)
   boardEl.addEventListener('click', handleCellClick);
+
+  // Keyboard navigation (LW-01): Enter or Space activates the focused cell
+  boardEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleCellClick(e);
+    }
+  });
 
   // Restart button (UI-04)
   restartBtn.addEventListener('click', resetGame);
