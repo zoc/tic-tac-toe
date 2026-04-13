@@ -98,11 +98,9 @@ html, body {
   gap: var(--cell-gap);
   width: var(--board-size);
   height: var(--board-size);
-  /* subtle accent border */
-  border: 2px solid var(--accent);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--accent);  /* gap color = accent red */
+  background: var(--accent);  /* gap color = accent red; background alone forms the grid lines uniformly */
 }
 
 /* ─── Individual cells ─── */
