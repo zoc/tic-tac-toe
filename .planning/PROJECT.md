@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished web frontend featuring animations, color, and win highlighting. The computer is beatable — it plays well but makes occasional mistakes.
+A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished web frontend featuring color theming, win highlighting, and responsive layout. The computer is beatable — it plays well but makes occasional mistakes.
 
 ## Core Value
 
@@ -15,17 +15,15 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] Win/loss/draw detection — Validated in Phase 1: Rust Game Engine
 - [x] Computer opponent (O) with beatable AI — Validated in Phase 1: Rust Game Engine
 - [x] Human plays as X, always goes first — Validated in Phase 1: Rust Game Engine
-
-### Active
-
 - [x] Rust game engine compiled to WebAssembly — Validated in Phase 2: WASM Bridge
 - [x] 3x3 grid rendered in the browser — Validated in Phase 3: Browser Game
-- [x] Human plays as X, always goes first — Validated in Phase 3: Browser Game
-- [x] Computer opponent (O) with beatable AI — Validated in Phase 3: Browser Game
 - [x] Win/loss/draw detection with visual highlighting — Validated in Phase 3: Browser Game
 - [x] Score tracking across games (wins, losses, draws) — Validated in Phase 3: Browser Game
 - [x] Polished UI — dark navy/red theme, responsive grid, win highlight — Validated in Phase 3: Browser Game
 - [x] New game / restart functionality — Validated in Phase 3: Browser Game
+- [x] Keyboard navigation (tab + enter/space to place moves) — Validated in Phase 3: Browser Game (code review fix)
+- [x] XSS-safe error handling — Validated in Phase 3: Browser Game (code review fix)
+- [x] Hover suppressed during disabled board state — Validated in Phase 3: Browser Game (code review fix)
 
 ### Out of Scope
 
@@ -34,14 +32,18 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - Mobile native app — web only
 - Difficulty selection — single beatable difficulty level
 - Player choosing X or O — human is always X
+- Animations / sound effects — deferred to v2
 
 ## Context
 
 - Rust + WebAssembly via wasm-pack and wasm-bindgen
-- Game logic (board state, AI, win detection) lives in Rust/WASM
-- Frontend (rendering, animations, event handling) in HTML/CSS/JS
-- No heavy framework needed — vanilla JS or lightweight approach
-- The AI should be based on minimax with random mistakes to keep it beatable
+- Game logic (board state, AI, win detection) lives entirely in Rust/WASM (~927 LOC)
+- Frontend (rendering, event handling, score display) in HTML/CSS/JS (~446 LOC)
+- Vanilla JS + CSS — no framework needed for a 9-cell game
+- AI uses minimax with ~25% mistake injection rate — tunable constant in `src/ai.rs`
+- Vite 8 dev server + production build; `vite-plugin-wasm` for WASM ESM import
+- `build.target: 'esnext'` replaces `vite-plugin-top-level-await` (incompatible with Vite 8)
+- CSS Grid with explicit `grid-template-rows` required for stable cell sizing
 
 ## Constraints
 
@@ -57,10 +59,23 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 | Beatable AI via imperfect minimax | Perfect play is frustrating; occasional mistakes make it fun | Validated Phase 1 — 25% mistake rate, minimax with depth scoring |
 | Human always X, goes first | Simplifies UX — no pregame choice needed | Validated Phase 1 — X starts, turn alternation enforced |
 | Score tracking across games | Adds replayability without complexity | Validated Phase 3 — in-memory wins/losses/draws tally, resets on page refresh |
+| `build.target: 'esnext'` over vite-plugin-top-level-await | Plugin incompatible with Vite 8 | Validated Phase 3 — top-level await works natively in esnext targets |
+| `grid-template-rows: repeat(3, 1fr)` explicit sizing | Without it, rows collapse/expand as X/O text renders | Validated Phase 3 — stable cell dimensions throughout game |
+| DOM text node construction over innerHTML for error display | Prevents XSS injection from error message strings | Validated Phase 3 — code review fix MD-01 |
 
 ## Current State
 
-Phase 3 complete — milestone v1.0 delivered. Full playable tic-tac-toe game in the browser: Vite dev server + production build, dark navy/red UI, responsive CSS Grid board, WASM-powered AI, win highlighting, score tracking, restart button. All 3 phases complete.
+**Milestone v1.0 complete** (2026-04-13). Full playable tic-tac-toe in the browser:
+- Vite 8 dev server and production build
+- Dark navy/red UI, responsive CSS Grid board
+- WASM-powered AI (imperfect minimax, ~25% mistake rate)
+- Win highlighting, draw detection, game-over lockout
+- Score tracking (wins/losses/draws) across sessions
+- Restart button (no page refresh needed)
+- Keyboard navigation (tab + enter/space)
+- XSS-safe, hover-suppressed-when-disabled
+- 44 commits, 2 days (2026-04-12 → 2026-04-13)
+- ~1,373 total LOC (927 Rust + 446 HTML/CSS/JS)
 
 ## Evolution
 
@@ -80,4 +95,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-13 after Phase 3 completion*
+*Last updated: 2026-04-13 — Milestone v1.0 complete*
