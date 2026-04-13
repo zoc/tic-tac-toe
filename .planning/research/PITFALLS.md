@@ -1,269 +1,645 @@
-# Pitfalls Research
+# Domain Pitfalls — v1.1 Polish & Feel
 
-**Domain:** Rust/WASM browser game (tic-tac-toe)
-**Researched:** 2026-04-12
-**Confidence:** HIGH — based on official Rust WASM Book, wasm-bindgen docs, and wasm-pack documentation
+**Domain:** Browser game polish (CSS animations, Web Audio, localStorage, dark mode)
+**Codebase:** Rust/WASM + Vite 8 + vanilla JS/CSS — existing game, adding features
+**Researched:** 2026-04-13
+**Confidence:** HIGH — MDN official docs + deep codebase analysis
+
+---
+
+## Context: Why This Document Exists
+
+The v1.0 PITFALLS.md covers Rust/WASM boundary issues (async init, panic hooks, crate-type).
+This document covers the six **browser-side** features being added in v1.1:
+
+1. Smooth CSS animations for piece placement and board transitions
+2. Animated win line through winning cells
+3. Computer "thinking" delay (300–800ms)
+4. Persistent scores via localStorage
+5. Sound effects with mute toggle (Web Audio API)
+6. Dark mode via `prefers-color-scheme`
+
+Each pitfall is mapped to the specific feature and includes the fix for **this** codebase.
+
+---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Forgetting Async WASM Initialization
+Mistakes that require rewriting significant code or cause obvious broken behavior.
+
+---
+
+### Pitfall 1: Animation Classes Applied to innerHTML-Wiped Elements
+
+**Feature:** CSS animations for piece placement
 
 **What goes wrong:**
-WASM modules must be asynchronously loaded and initialized before any exported functions can be called. Developers write JS that calls WASM functions synchronously at module load time, resulting in `TypeError: wasm is undefined` or similar cryptic errors. With `--target web`, you must call and `await` the `init()` function before using any exports.
+The current `renderBoard()` calls `boardEl.innerHTML = ''` then recreates all 9 cells from scratch. When a new piece is placed, the intent is to animate only the *new* cell. But if you apply an animation class before calling `renderBoard()`, the element is destroyed. If you apply it after, you're animating a brand-new DOM node that hasn't been painted yet — which can cause the animation to skip the first frame on some browsers.
+
+More subtly: if `renderBoard()` is called after human move AND after computer move, every cell (including previously placed ones) gets a freshly created DOM node. An `animation: pop-in 0.2s` on `.cell--taken` would fire on ALL placed pieces every time any move is made — so move 5 animates cells 1, 2, 3, 4, and 5 simultaneously.
 
 **Why it happens:**
-WASM isn't like a regular JS import — the binary must be fetched, compiled, and instantiated. This is inherently asynchronous. The generated JS wrapper hides some complexity, but the initialization step is still required and easy to forget, especially when not using a bundler.
+The innerHTML-clear approach was the right call for v1.0 (simplicity, stateless rendering). But CSS animations are stateful — they fire when a class is added to an element that didn't have it. Recreating all elements from scratch defeats this.
 
-**How to avoid:**
-- Use `--target web` and always structure your entry point as an async `run()` function:
-  ```js
-  import init, { GameState } from './pkg/tic_tac_toe.js';
-  async function run() {
-    await init();
-    // NOW you can use GameState
+**Consequences:**
+- All pieces animate on every render — jarring instead of polished
+- The last-placed piece is indistinguishable from re-rendered old pieces
+- Potential flicker during animation on Safari (paint timing issue)
+
+**Prevention:**
+Two valid strategies:
+
+*Strategy A — Incremental DOM update (recommended):*
+Track which cells were already rendered. On `renderBoard()`, update existing cells instead of wiping and recreating. Only add `.cell--animate-in` on the newly placed cell:
+```js
+// Instead of innerHTML = '', update existing cells in-place
+const cells = boardEl.querySelectorAll('.cell');
+// Update only changed cells; add animation class only to newly filled ones
+```
+
+*Strategy B — Animation class with immediate removal:*
+After `renderBoard()` clears and recreates, compare the WASM board state before/after to find the new position, then add the animation class only to that one cell. Force-restart the animation by voiding the offset:
+```js
+cell.classList.remove('cell--animate-in');
+void cell.offsetWidth; // forces reflow, resets animation
+cell.classList.add('cell--animate-in');
+```
+
+Strategy A is cleaner for win-line animation too. Strategy B works but requires careful bookkeeping of "what was the board before this move."
+
+**Detection:** Play the game and open DevTools Animation panel — look for multiple animations firing simultaneously when they should be one.
+
+**Phase:** Animations phase — must decide which strategy before writing any animation CSS.
+
+---
+
+### Pitfall 2: Win Line Animation Requires Absolute Positioning Over the Board
+
+**Feature:** Animated win line through three winning cells
+
+**What goes wrong:**
+Developers try to animate a win line using `border` on individual cells, `background` gradients, or SVG `line` inside each cell. None of these produce a clean straight line through the center of three cells that feels like a real strikethrough.
+
+The natural implementation is an overlay `<div>` or `<svg>` element positioned absolutely over the board, with a `clip-path` or `stroke-dasharray` animation drawing the line from one end to the other. But the board uses `overflow: hidden` (to clip the cell corners), which clips absolutely positioned children too — the overlay is hidden.
+
+**Why it happens:**
+`overflow: hidden` on `.board` clips all descendant elements, including absolutely positioned ones. This is well-documented but easy to forget.
+
+**Consequences:**
+- Win line overlay is completely invisible — silent failure
+- Developers waste time debugging animation-related CSS instead of the real culprit
+
+**Prevention:**
+Two options:
+
+*Option A — Remove `overflow: hidden` from `.board`, handle corner rounding differently:*
+Replace `border-radius + overflow: hidden` with `border-radius` only on individual cells (or on a wrapper). The current design uses `background: var(--accent)` on the board with `overflow: hidden` to show gap color. With careful restructuring this can still work.
+
+*Option B — Position the overlay on a parent wrapper element (recommended):*
+Add a `position: relative` wrapper around the board, then absolutely position the win line overlay on that wrapper. The board keeps `overflow: hidden` for its own purposes, but the overlay sits outside it (as a sibling):
+```html
+<div class="board-wrapper"> <!-- position: relative -->
+  <div class="board" id="board">...</div>
+  <svg class="win-line" id="win-line">...</svg>
+</div>
+```
+
+The SVG/div overlay is a sibling of `.board`, not a child — it isn't clipped.
+
+**Detection:** Add a brightly colored `position: absolute` element inside `.board` and verify it gets clipped. That confirms the issue before spending time on the win line implementation.
+
+**Phase:** Win line animation phase — resolve layout strategy before writing animation code.
+
+---
+
+### Pitfall 3: Web Audio Context Blocked by Autoplay Policy
+
+**Feature:** Sound effects for moves and game outcomes
+
+**What goes wrong:**
+Creating an `AudioContext` before any user gesture results in the context being created in `suspended` state. All sounds queued before the first interaction are silently dropped. On some browsers, the context never resumes without explicit `audioCtx.resume()` in response to a user gesture.
+
+Developers create `AudioContext` at module load time (alongside `new WasmGame()` in `main()`), play sounds normally in response to clicks, and then wonder why sounds don't play on the first click.
+
+**Why it happens:**
+All major browsers implement the Autoplay Policy (formalized ~2018, enforced strictly since 2020). The policy requires user gesture → audio start. Creating `AudioContext` before the first interaction is technically allowed, but the context starts `suspended`. MDN: "if you create the context outside of a user gesture, its state will be set to suspended."
+
+The first cell click IS a user gesture and DOES resume a suspended context — but only if you call `audioCtx.resume()` explicitly. If you don't check `audioCtx.state === 'suspended'`, the sound code runs but produces no output.
+
+**Consequences:**
+- First move in every game session is silent (the most important sound UX moment)
+- No error thrown, no warning in console — silent failure
+- Hard to reproduce in development if you click the page as part of dev workflow
+
+**Prevention:**
+```js
+// Create AudioContext lazily or check state before playing
+async function playSound(audioCtx, buffer) {
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume();
   }
-  run();
-  ```
-- Never call WASM exports at the top level of a script without awaiting init first.
-- Consider using a bundler (Webpack/Vite) which handles WASM initialization automatically with `--target bundler`.
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(audioCtx.destination);
+  source.start(0);
+}
+```
 
-**Warning signs:**
-- `TypeError` or `undefined is not a function` errors in the browser console on page load.
-- Errors that only appear on first load but not on hot-reload (because bundler caches the initialized module).
+For this game, the cleanest approach is to initialize `AudioContext` on the first user click (lazy init), not in `main()`. The click handlers already exist (`handleCellClick`, `resetGame`) — hook in there.
 
-**Phase to address:**
-Phase 1 (Project scaffolding) — get the WASM init pattern right from the start.
+**Mute toggle interaction:** If the user mutes then unmutes, don't destroy and recreate `AudioContext`. Use a `GainNode` with `gain.value = 0` for mute — the context stays running, the mute is instant. Destroying/recreating `AudioContext` is expensive and can cause audio glitches.
 
----
+**Detection:** Load the game in a fresh incognito window. Click a cell immediately. If no sound plays, autoplay policy is blocking.
 
-### Pitfall 2: Excessive JS↔WASM Boundary Crossing
-
-**What goes wrong:**
-Every call across the JS↔WASM boundary has overhead: data must be serialized/copied, function call indirection occurs, and the JS engine can't optimize across the boundary. If the game logic makes many small calls per frame (e.g., calling `get_cell(row, col)` 9 times per render), the overhead dominates and the app feels sluggish or the architecture becomes convoluted.
-
-**Why it happens:**
-Developers design fine-grained APIs that mirror how they'd structure a pure JS or pure Rust app. They expose individual getters for each piece of state instead of thinking about the boundary as a bulk data transfer point.
-
-**How to avoid:**
-- **Design coarse-grained APIs across the boundary.** Instead of `get_cell(row, col)` called 9 times, expose `get_board() -> *const u8` returning a pointer to the board array in WASM linear memory that JS reads directly.
-- **Keep large, long-lived data in Rust (WASM linear memory).** Expose opaque handles and bulk operations.
-- **Minimize copying:** Use `#[repr(u8)]` enums and flat arrays so JS can read WASM memory directly via `Uint8Array` views without serialization.
-- For a 3x3 tic-tac-toe board, the overhead is negligible — but establishing the right pattern now prevents issues in any follow-up project.
-
-**Warning signs:**
-- More than 2-3 WASM function calls per frame for rendering.
-- Passing complex objects (strings, structs) back and forth frequently.
-- Using `serde_wasm_bindgen::to_value` for data that could be a flat array.
-
-**Phase to address:**
-Phase 1 (Rust game engine) — design the WASM API boundary before writing implementation.
+**Phase:** Sound effects phase — must handle lazy init and suspended-state resume from day one.
 
 ---
 
-### Pitfall 3: Cryptic Panic Messages in the Browser
+### Pitfall 4: AudioContext Accumulates Nodes (Memory Leak Pattern)
+
+**Feature:** Sound effects for moves and game outcomes
 
 **What goes wrong:**
-When Rust code panics in WASM, the default behavior produces `RuntimeError: unreachable executed` — an utterly unhelpful error message with no stack trace, no panic message, no file/line info. Developers spend hours debugging what turns out to be a simple `unwrap()` on a `None` value.
+`AudioBufferSourceNode` is a single-use object — it cannot be restarted after `source.start()`. Each sound play creates a new node. If the node isn't explicitly disconnected, old nodes accumulate in the audio graph, consuming memory. In a long game session, this can cause audible artifacts or excessive memory use.
 
 **Why it happens:**
-WASM's `unreachable` instruction is how panics manifest by default. Without `console_error_panic_hook`, the Rust panic infrastructure's formatted messages are silently swallowed. Developers don't install the hook because the default template may not set it up, or they forget to call `set_once()` early enough.
+MDN: "An `AudioBufferSourceNode` can only be played once; after each call to `start()`, you have to create a new node if you want to play the same sound again." Developers cache the source node and call `start()` again — throws a DOM exception. Or they create new nodes per play but forget to disconnect finished nodes.
 
-**How to avoid:**
-- Add `console_error_panic_hook` as a dependency and call `console_error_panic_hook::set_once()` at the very start of your public API entry point (e.g., in a `new()` constructor or an explicit `init()` function):
-  ```rust
-  #[wasm_bindgen]
-  pub fn init() {
-      console_error_panic_hook::set_once();
+**Prevention:**
+```js
+function playBuffer(audioCtx, gainNode, buffer) {
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.connect(gainNode);  // always connect through the gain node (for mute)
+  source.onended = () => source.disconnect();  // clean up when done
+  source.start(0);
+}
+```
+
+The `onended` callback disconnects the node after playback, preventing accumulation. This is the canonical pattern.
+
+**Detection:** Play the game many times rapidly. Check memory usage in DevTools performance profiler — audio node count should remain stable, not grow with each game.
+
+**Phase:** Sound effects phase — include `onended` cleanup from the first implementation.
+
+---
+
+### Pitfall 5: Computer Thinking Delay Conflicts with isProcessing Guard
+
+**Feature:** Computer "thinking" delay (300–800ms)
+
+**What goes wrong:**
+The current code has a synchronous computer move:
+```js
+isProcessing = true;
+const compPos = game.computer_move();
+renderBoard();
+isProcessing = false;
+```
+
+When introducing a delay via `setTimeout`, the `isProcessing` flag is set `true` before the timeout fires and set `false` only inside the timeout callback. This means during the delay, clicks are correctly blocked. BUT: if the "New Game" button is shown during a delay (it's only shown after game over, so this is rare), resetting the game could clear `isProcessing` while the timeout callback is still pending — when the timeout fires, `game.computer_move()` runs on a reset game state.
+
+More critically: if the delay is implemented carelessly with `await new Promise(resolve => setTimeout(resolve, delay))` inside `handleCellClick`, the async function may not properly guard against re-entry. The existing `if (isProcessing) return` guard at the top is still evaluated synchronously, but multiple async call chains could be in flight.
+
+**Why it happens:**
+Converting synchronous game logic to async (with delays) without updating the concurrency guard pattern. The guard was designed for synchronous execution — it works perfectly now, but `async/await` with delays creates new re-entrancy windows.
+
+**Consequences:**
+- Computer calls `computer_move()` on a freshly reset board
+- Potential double-move, invalid state, or JS exception
+- Hard to reproduce (timing-dependent race condition)
+
+**Prevention:**
+
+1. Store the pending timeout ID so it can be cancelled:
+```js
+let thinkingTimer = null;
+
+// In resetGame():
+if (thinkingTimer) {
+  clearTimeout(thinkingTimer);
+  thinkingTimer = null;
+  isProcessing = false;
+}
+```
+
+2. In the timeout callback, check game state is still valid before calling WASM:
+```js
+thinkingTimer = setTimeout(() => {
+  thinkingTimer = null;
+  // Guard: was the game reset during our delay?
+  if (game.get_status() !== 'playing') {
+    isProcessing = false;
+    boardEl.classList.remove('board--disabled');
+    return;
   }
-  ```
-- Build with debug symbols during development: `wasm-pack build --dev` or set `debug = true` in `[profile.release]` in Cargo.toml.
-- Without debug symbols, stack traces show `wasm-function[42]` instead of `my_crate::my_function`.
+  const compPos = game.computer_move();
+  // ...
+}, delay);
+```
 
-**Warning signs:**
-- `RuntimeError: unreachable executed` in the browser console.
-- Stack traces with only numeric function identifiers.
-- Errors that are impossible to correlate with Rust source code.
+**Detection:** Click a cell, then immediately click "New Game" during the thinking delay. Verify the computer doesn't move on the new game's board.
 
-**Phase to address:**
-Phase 1 (Project scaffolding) — install panic hook before writing any game logic.
+**Phase:** Computer delay phase — update `resetGame()` to cancel pending timers.
 
 ---
 
-### Pitfall 4: Wrong `crate-type` Breaks Native Tests
+### Pitfall 6: localStorage Throws in Private/Incognito Mode and file:// Protocol
+
+**Feature:** Persistent scores via localStorage
 
 **What goes wrong:**
-WASM crates require `crate-type = ["cdylib"]` in `Cargo.toml` to produce `.wasm` output. But if you _only_ specify `cdylib`, you can't run native `#[test]` functions with `cargo test` — the linker fails because `cdylib` doesn't produce an `rlib` that test harnesses can link against. You lose the ability to test game logic natively (which is far easier to debug than WASM).
+Calling `localStorage.setItem()` or `localStorage.getItem()` throws a `SecurityError` exception when:
+- User is in private/incognito browsing mode AND their browser is configured to block storage
+- Page is served from `file://` (not relevant for this Vite project, but can affect test.html)
+- User has explicitly disabled cookies/storage in browser settings
+
+This is a silent failure in development (developer's browser settings allow storage) but crashes for some users in production. The exception propagates up and can break score persistence without any visible error.
+
+MDN: "Thrown in one of the following cases: The origin is not a valid scheme/host/port tuple... The request violates a policy decision."
 
 **Why it happens:**
-Developers follow WASM tutorials that set `crate-type = ["cdylib"]` and never add `"rlib"`. They don't discover the problem until they try to write their first `#[test]`.
+Developers always test in their own browser with default settings. Incognito-with-storage-blocked is common for privacy-focused users. The exception is thrown at the `localStorage` access itself — not at read time later.
 
-**How to avoid:**
-- Always set both crate types in `Cargo.toml`:
-  ```toml
-  [lib]
-  crate-type = ["cdylib", "rlib"]
-  ```
-- `cdylib` = produces the `.wasm` binary for the browser.
-- `rlib` = produces a Rust library that `cargo test` and `cargo bench` can link against.
+**Consequences:**
+- Scores silently fail to persist (if caught); or game crashes (if uncaught)
+- Inconsistent behavior: works for developer, broken for some users
+- Stack traces pointing at localStorage code confuse developers who never saw the error
 
-**Warning signs:**
-- `cargo test` fails with linker errors like `cannot find -l<crate_name>`.
-- All tests are written as `wasm-bindgen-test` when they don't actually need browser APIs.
+**Prevention:**
+Wrap all `localStorage` operations in try/catch:
+```js
+function saveScores(score) {
+  try {
+    localStorage.setItem('ttt-scores', JSON.stringify(score));
+  } catch {
+    // Storage blocked (private mode, file://, security policy) — fall back to in-memory
+  }
+}
 
-**Phase to address:**
-Phase 1 (Project scaffolding) — set this in `Cargo.toml` from day one.
+function loadScores() {
+  try {
+    const saved = localStorage.getItem('ttt-scores');
+    return saved ? JSON.parse(saved) : null;
+  } catch {
+    return null;
+  }
+}
+```
+
+Also validate parsed data — `JSON.parse()` can return unexpected shapes if localStorage was manually modified. Always check that the loaded object has the expected shape before using it.
+
+**Detection:** Open in incognito mode, verify scores still display (as 0) even if they can't be saved.
+
+**Phase:** localStorage phase — wrap on first write, never raw-access localStorage.
 
 ---
 
-### Pitfall 5: Ownership Confusion with `#[wasm_bindgen]` Exported Structs
+### Pitfall 7: Dark Mode Causes FOUC (Flash of Unstyled Content / Flash of Wrong Color)
+
+**Feature:** Dark mode support respecting `prefers-color-scheme`
 
 **What goes wrong:**
-When a `#[wasm_bindgen]` struct is passed by value to a JS function, ownership transfers and the Rust-side memory is consumed. If JS code tries to use the object again after passing it to another function, it gets an error about the object being "already freed" or "null pointer". This is especially confusing because JS developers don't think about ownership.
+The existing design is already dark navy (`--bg: #1a1a2e`). When adding light mode support via `@media (prefers-color-scheme: light)`, the CSS variables are overridden. If those overrides are defined in an external stylesheet loaded asynchronously, or if JavaScript is reading/writing `data-theme` attributes to the `<html>` element, users with light mode may briefly see the dark theme before the correct colors are applied. This flash is jarring.
 
-Similarly, public fields on exported structs must implement `Copy` (for auto-generated getters/setters), or you need `#[wasm_bindgen(getter_with_clone)]`. A `pub value: String` field on a `#[wasm_bindgen]` struct will fail to compile without this annotation.
+Additionally, if you add a manual theme toggle (user can override their OS preference) and store the preference in localStorage, there's a window between page load and JS execution where the OS preference is applied before the manual preference loads.
 
 **Why it happens:**
-Rust's ownership model is faithfully represented in the JS bindings. When you pass a struct by value, it's moved — the JS wrapper invalidates the old handle. Developers coming from JS or even Rust (where the compiler catches use-after-move) are caught off-guard because JS has no compile-time check.
+CSS `@media (prefers-color-scheme: light)` is evaluated by the browser as the stylesheet parses. No flash if done purely in CSS. Flash happens when:
+- Theme is applied via a `data-theme` attribute set by JavaScript
+- JavaScript reads localStorage to determine the initial theme
+- The `<link>` stylesheet loads after initial paint
 
-**How to avoid:**
-- Use `&self` and `&mut self` methods instead of consuming `self` wherever possible.
-- For the tic-tac-toe game, keep a single `GameState` struct alive in JS and call methods on it via `&mut self` — never pass it by value.
-- Use `#[wasm_bindgen(getter_with_clone)]` for structs with `String` or non-`Copy` public fields.
-- Prefer returning primitive values (u8, u32, bool) or pointers to linear memory over returning complex structs.
+**Prevention:**
+For this project, the cleanest implementation is **CSS-only for the initial theme** — no JS needed for `prefers-color-scheme`. Add overrides directly in `style.css`:
+```css
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f0f0f5;
+    --surface: #ffffff;
+    --text: #1a1a2e;
+    /* etc. */
+  }
+}
+```
 
-**Warning signs:**
-- JS runtime errors about "null pointer passed to Rust" or "attempt to use a moved value".
-- Compilation errors about `Copy` not being implemented for a field type.
+Since the CSS is inlined via `<link rel="stylesheet" href="/src/style.css" />` which loads synchronously in the `<head>`, there is no flash — the correct colors are set before first paint.
 
-**Phase to address:**
-Phase 1 (Rust game engine API design) — decide on API shape before implementation.
+If adding a manual toggle, use the pattern:
+```html
+<!-- In <head>, before stylesheet: -->
+<script>
+  // Runs before CSS — sets theme class synchronously to prevent flash
+  const saved = localStorage.getItem('ttt-theme');
+  if (saved) document.documentElement.dataset.theme = saved;
+</script>
+```
+
+This inline script runs before CSS is applied and eliminates the flash.
+
+**Detection:** In macOS: System Preferences → Appearance → Light. Open the game. A flash from dark→light means FOUC. It should appear in the correct colors immediately.
+
+**Phase:** Dark mode phase — implement as CSS-only first; add JS toggle only if required, with the inline script pattern.
 
 ---
 
-### Pitfall 6: WASM Binary Size Bloat from Formatting and Panics
+## Moderate Pitfalls
+
+Issues that cause bugs or poor UX but don't require major restructuring to fix.
+
+---
+
+### Pitfall 8: CSS `transition` on `.cell` Conflicts with Animation on New Piece
+
+**Feature:** CSS animations for piece placement
 
 **What goes wrong:**
-The `.wasm` binary becomes unexpectedly large (hundreds of KB for a simple app). The formatting machinery (`std::fmt`, `Display`, `Debug`), panic infrastructure, and the default allocator (`dlmalloc`, ~10KB) are the usual culprits. A "hello world" WASM can easily be 50KB+ unoptimized.
+The existing CSS has `transition: background 0.1s ease` on `.cell`. When a cell gets the `.cell--taken` class added (with a new background color and text), the background color smoothly transitions. If you also add a `@keyframes` animation (e.g., `pop-in`), the two effects can conflict or compound awkwardly:
+- `transition` fades the background while `animation` scales the element
+- On Safari, transitions and animations on the same property can produce unexpected results
+- The `transition` was designed for hover feedback, not for piece placement
 
-**Why it happens:**
-Any use of `format!()`, `println!()`, `.to_string()`, `panic!()` (even implicit panics from `unwrap()`, array indexing, division) pulls in the full formatting and panic infrastructure. Generics cause monomorphization that multiplies code size. Developers don't realize how much code these seemingly simple operations generate.
+**Prevention:**
+Scope the transition narrowly. Either:
+1. Remove `transition: background` when `.cell--taken` is added (the animation handles the entrance)
+2. Change the transition to only apply to hover-state cells: `.cell:not(.cell--taken) { transition: background 0.1s ease; }`
 
-**How to avoid:**
-- Configure release profile in `Cargo.toml`:
-  ```toml
-  [profile.release]
-  lto = true        # Link-time optimization — inlines aggressively, removes dead code
-  opt-level = 's'   # Optimize for size (try 'z' too, but measure — 's' is sometimes smaller)
-  ```
-- Run `wasm-opt` post-build (wasm-pack does this automatically in release mode).
-- Avoid `format!()` in production paths — use it only in debug/logging code.
-- Use `.get(i)` instead of `[i]` indexing to avoid implicit panic code paths.
-- Use `twiggy` to profile binary size: `twiggy top -n 20 pkg/your_crate_bg.wasm`.
-- For tic-tac-toe specifically: the binary will be small enough that this isn't a blocker, but good habits matter.
+The second option is clean and already logically correct — taken cells shouldn't respond to hover anyway.
 
-**Warning signs:**
-- `.wasm` file > 100KB for a simple game.
-- `twiggy` shows `dlmalloc`, `fmt`, or `panicking` as top contributors.
-- Slow initial page load on mobile connections.
-
-**Phase to address:**
-Phase 2 (Build optimization) — after core logic works, optimize the release build.
+**Phase:** Animations phase — audit existing transitions before adding animations.
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 9: Win Line SVG Coordinate System Doesn't Match CSS Grid
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Using `to_string()` to pass board state to JS | Quick rendering, easy to debug | Allocates a String in WASM, copies to JS heap every frame; pulls in `fmt` code bloat | MVP only — switch to direct memory access for production |
-| Using `unwrap()` freely in game logic | Faster to write, cleaner looking code | Each `unwrap()` adds panic infrastructure to the binary; crashes show `unreachable` without panic hook | During development with panic hook installed; replace with safe alternatives before release |
-| Skipping `wasm-opt` during development | Faster build times | Larger binaries in dev; forgetting to enable for release | Always acceptable in dev; never skip in release |
-| `--target bundler` with Webpack for serving | Familiar tooling, auto-handles WASM init | Heavy dependency chain for serving a static page; Webpack config complexity | Only if you already have a Webpack project; prefer `--target web` for simplicity |
+**Feature:** Animated win line through winning cells
 
-## Integration Gotchas
+**What goes wrong:**
+The board is sized with `var(--board-size): min(90vw, 90vh, 440px)` and laid out with CSS Grid. An SVG overlay sized at `100% x 100%` of the board wrapper should have its coordinate system match the board. But if the board wrapper and SVG don't share the same bounding box (due to padding, border, or `overflow: visible` spilling), the calculated cell center coordinates for the SVG line don't align with the visual cell centers.
 
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| WASM ↔ JS data | Serializing board state as JSON with `serde_wasm_bindgen` | Use `#[repr(u8)]` flat arrays and expose a pointer to linear memory; JS reads via `new Uint8Array(wasm.memory.buffer, ptr, len)` |
-| WASM module loading | Assuming `import` of WASM works like a regular ES module | With `--target web`, always `await init()` before calling any exports; WASM requires async instantiation |
-| `web-sys` feature flags | Importing `web-sys` and wondering why DOM methods don't exist | Each Web API must be individually enabled via Cargo.toml features: `features = ["console", "Document", "Element"]` |
-| Closure lifetime | Creating a `Closure<dyn FnMut()>` for `requestAnimationFrame` and letting it drop | Store the `Closure` in a struct field or use `Closure::forget()` (leaks memory) or `Closure::into_js_value()`. If the `Closure` drops, the JS callback throws on next invocation |
-| Serving WASM files | Opening `index.html` directly with `file://` protocol | WASM requires proper MIME type (`application/wasm`) and CORS headers. Use a local HTTP server (`python3 -m http.server`, `miniserve`, or a dev server) |
+Additionally: the board uses `gap: var(--cell-gap)` (4px). Win line calculations that assume uniform cell width (`boardSize / 3`) are off by `gap / 3` per cell — small but visible.
 
-## Performance Traps
+**Prevention:**
+Calculate cell centers from actual DOM measurements, not CSS math:
+```js
+function getCellCenter(cellEl, boardEl) {
+  const cellRect = cellEl.getBoundingClientRect();
+  const boardRect = boardEl.getBoundingClientRect();
+  return {
+    x: cellRect.left + cellRect.width / 2 - boardRect.left,
+    y: cellRect.top + cellRect.height / 2 - boardRect.top,
+  };
+}
+```
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| String-based rendering | Growing memory usage, GC pauses on each frame | Render to Canvas API or manipulate DOM directly; pass cell data as typed array, not string | Noticeable with grids > 20×20; not a real issue for 3×3 tic-tac-toe |
-| Allocating per frame | Memory grows over time, eventual slowdown | Pre-allocate board arrays; reuse Vec instead of creating new ones per tick | Visible in long-running sessions or high-frequency updates |
-| Debug builds in production | Binary is 5-10× larger, runs significantly slower | Always deploy release builds: `wasm-pack build --release` | Immediately — debug WASM is noticeably slow even for simple apps |
-| Not using `instantiateStreaming` | WASM must fully download before compilation starts | Use `--target web` (the generated JS uses streaming compilation by default) or ensure your bundler supports streaming | Affects load time on slow connections; the generated code handles this correctly if you don't override |
+This is immune to gap size, padding, or board-size changes. Always measure from the DOM rather than computing from CSS values.
 
-## Security Mistakes
+**Phase:** Win line animation phase — use `getBoundingClientRect()` for coordinate calculation.
 
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Trusting game state in JS | Player can modify game state via browser DevTools to cheat | For a single-player game this is fine — the only person cheated is the player. Don't over-engineer server-side validation for a client-only game. |
-| Exposing internal WASM memory layout | Theoretically allows memory corruption via JS | Use opaque handles and well-defined API methods rather than raw pointer manipulation. For a tic-tac-toe game, this is extremely low risk. |
-| Serving WASM without proper Content-Type | Browser may refuse to compile WASM | Ensure server sends `Content-Type: application/wasm` for `.wasm` files |
+---
 
-## UX Pitfalls
+### Pitfall 10: localStorage Key Collision
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| No loading state during WASM init | User sees blank page for a moment, may think app is broken | Show a lightweight HTML/CSS loading indicator, then hide it after `await init()` completes |
-| Computer moves instantly | Feels robotic, not like playing against an opponent | Add a short artificial delay (200-500ms) before the computer's move for a more natural feel |
-| No visual feedback on player click | User unsure if click registered, especially on mobile | Immediately update the UI on click before calling WASM; or ensure WASM call + DOM update happens within the same animation frame |
-| Win/loss announced but board immediately resets | User can't see the winning line or appreciate the outcome | Highlight the winning line and show result for 1-2 seconds before offering "New Game" |
-| Unbeatable AI | Player gets frustrated, stops playing | Minimax with random mistakes (as specified in PROJECT.md) — the AI should feel smart but beatable |
+**Feature:** Persistent scores via localStorage
 
-## "Looks Done But Isn't" Checklist
+**What goes wrong:**
+Using a generic key like `"scores"` or `"wins"` risks collision with other applications on the same origin (e.g., another Vite app running on `localhost:5173`). During development, localhost is a shared origin for all local projects.
 
-- [ ] **WASM init:** Module loads, but did you test what happens if WASM fails to load? (network error, old browser) — verify graceful fallback or error message
-- [ ] **Panic hook:** Game works, but try triggering an edge case (invalid move, double-click) — verify you see a readable Rust panic message, not `unreachable`
-- [ ] **Score persistence:** Scores display, but do they survive a page reload? — verify if that's intended (localStorage) or accepted (scores reset on reload)
-- [ ] **Mobile clicks:** Game works with mouse, but tap events on mobile can fire differently — verify `click` events work on iOS Safari and Android Chrome
-- [ ] **Draw detection:** Win/loss works, but does a full-board draw correctly trigger? — verify the draw condition when all 9 cells are filled with no winner
-- [ ] **Browser back/forward:** User navigates away and back — verify game state is reasonable (reset is fine, but crashing is not)
-- [ ] **Release build:** Everything works in `--dev`, but did you test the release build? — verify `wasm-pack build --release` produces a working artifact with reasonable size
+**Prevention:**
+Use a namespaced key: `'ttt-v1-scores'` (app prefix + version). The version suffix allows clean migration if the stored data shape changes in future:
+```js
+const STORAGE_KEY = 'ttt-v1-scores';
+```
 
-## Recovery Strategies
+If the score schema changes (e.g., adding a new field), bump to `ttt-v2-scores` and let v1 data expire naturally.
 
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Wrong crate-type (missing rlib) | LOW | Add `"rlib"` to `crate-type` array in Cargo.toml, rebuild |
-| No panic hook installed | LOW | Add `console_error_panic_hook` dependency, call `set_once()` in init |
-| Excessive boundary crossing | MEDIUM | Refactor API to use bulk data transfer (pointer + length) instead of individual calls; requires changing both Rust exports and JS consumers |
-| Ownership confusion (use-after-move) | LOW | Change function signatures to take `&self` / `&mut self` instead of `self`; update JS call sites |
-| Large WASM binary | LOW | Add release profile optimizations to Cargo.toml, enable LTO and size optimization |
-| String-based rendering | MEDIUM | Refactor to expose board memory pointer, update JS to read typed array and render to Canvas/DOM |
+**Phase:** localStorage phase — namespace keys from first implementation.
 
-## Pitfall-to-Phase Mapping
+---
 
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Async WASM initialization | Phase 1: Scaffolding | Page loads without errors in browser console; WASM functions callable after init |
-| Panic hook not installed | Phase 1: Scaffolding | Intentionally trigger a panic; verify readable message in browser console |
-| Wrong crate-type | Phase 1: Scaffolding | `cargo test` runs successfully with a trivial test |
-| API boundary design | Phase 1: Game engine | Review: no more than 2-3 cross-boundary calls per game action |
-| Ownership confusion | Phase 1: Game engine | All public WASM methods use `&self` or `&mut self`; no pass-by-value of game state |
-| WASM binary size | Phase 2: Polish/release | Release `.wasm` file < 50KB (generous for tic-tac-toe); verified with `ls -la pkg/*.wasm` |
-| UX: computer move timing | Phase 2: UI polish | Playtest: computer move has visible delay, feels natural |
-| UX: loading state | Phase 2: UI polish | Throttle network in DevTools; verify loading indicator appears |
-| UX: win highlighting | Phase 2: UI polish | Win a game; verify winning line is highlighted for at least 1 second before reset option |
+### Pitfall 11: Mute State Not Persisted Across Sessions
+
+**Feature:** Sound effects with mute toggle
+
+**What goes wrong:**
+Users toggle mute, refresh the page, and find themselves back with sound on. For a game with sound effects (which some users find annoying), this is worse than no mute toggle at all — the user must mute again every session.
+
+**Prevention:**
+Persist the mute preference in localStorage alongside scores:
+```js
+const MUTE_KEY = 'ttt-v1-muted';
+let isMuted = localStorage.getItem(MUTE_KEY) === 'true';
+
+function toggleMute() {
+  isMuted = !isMuted;
+  gainNode.gain.value = isMuted ? 0 : 1;
+  try { localStorage.setItem(MUTE_KEY, String(isMuted)); } catch {}
+  updateMuteButton();
+}
+```
+
+The mute button UI should also reflect the persisted state on page load.
+
+**Phase:** Sound effects phase AND localStorage phase should be designed together so both are persisted.
+
+---
+
+### Pitfall 12: `prefers-color-scheme` Doesn't React to OS Changes Without `matchMedia` Listener
+
+**Feature:** Dark mode support
+
+**What goes wrong:**
+CSS `@media (prefers-color-scheme)` automatically reacts to OS-level theme changes — the browser re-evaluates media queries and applies new styles without any JavaScript. However, if a manual theme toggle is added via a `data-theme` attribute on `<html>`, that attribute overrides the media query. When the user changes their OS theme after the page loads, the CSS media query fires but the JS-applied `data-theme` attribute takes precedence in the cascade, and nothing visually changes.
+
+**Prevention:**
+If adding a manual toggle, also add a `matchMedia` listener so the UI (toggle button state) stays in sync:
+```js
+const mq = window.matchMedia('(prefers-color-scheme: dark)');
+mq.addEventListener('change', () => {
+  if (!localStorage.getItem('ttt-theme')) {
+    // Only sync if user hasn't set a manual preference
+    updateThemeDisplay();
+  }
+});
+```
+
+For this project, if the scope is just `prefers-color-scheme` without a manual toggle, no JavaScript is needed — CSS handles it automatically and always stays in sync.
+
+**Phase:** Dark mode phase — keep JS out of pure-CSS dark mode; only add JS if manual toggle is required.
+
+---
+
+## Minor Pitfalls
+
+Small issues that cause subtle bugs or polish problems.
+
+---
+
+### Pitfall 13: Thinking Delay Status Text Race with Animation Timing
+
+**Feature:** Computer thinking delay + CSS animations
+
+**What goes wrong:**
+With a 300–800ms thinking delay, the "Computer's turn" status message appears, then the status changes to "Your turn" after the computer moves. If piece placement has a 200ms animation, the visual timeline becomes:
+- T+0ms: Human places piece, animation starts
+- T+200ms: Animation ends
+- T+300–800ms: Computer places piece, animation starts
+- T+500–1000ms: Computer animation ends, "Your turn" restored
+
+This is fine. But if the animation and delay use different `setTimeout` chains that are not coordinated, the "Your turn" message can appear while the computer's animation is still running — a minor but noticeable inconsistency.
+
+**Prevention:**
+Structure the flow as a sequential async chain:
+```
+humanMove → renderWithAnimation → await animationDone → 
+await thinkingDelay → computerMove → renderWithAnimation → 
+await animationDone → updateStatus('Your turn')
+```
+
+`animationDone` can be awaited with a `transitionend` or `animationend` listener:
+```js
+function waitForAnimation(el) {
+  return new Promise(resolve => {
+    el.addEventListener('animationend', resolve, { once: true });
+  });
+}
+```
+
+**Phase:** Animations + computer delay phase — coordinate animation timing with delay timing.
+
+---
+
+### Pitfall 14: Win-State Animation Fires Then Board Immediately Clears
+
+**Feature:** CSS animations + win line
+
+**What goes wrong:**
+`handleGameOver()` currently calls `renderBoard(winPositions)` which highlights winning cells, then shows the restart button. The user clicks "New Game" immediately, and `resetGame()` calls `renderBoard()` without winning positions — all animations/highlights disappear instantly.
+
+This is already partially addressed by `restartBtn.hidden = false` — the button appearing gives users time to see the result. But if the win line animation has a duration of 500ms and the user is a fast clicker, they can dismiss it before the animation completes.
+
+**Prevention:**
+Delay enabling the restart button by the animation duration:
+```js
+// In handleGameOver():
+restartBtn.hidden = false;
+restartBtn.disabled = true; // prevent immediate click
+setTimeout(() => { restartBtn.disabled = false; }, WIN_ANIMATION_DURATION_MS);
+```
+
+Or use `animationend` on the win line element to enable the button.
+
+**Phase:** Animations phase — consider animation duration when determining when to re-enable restart.
+
+---
+
+### Pitfall 15: Synthesized Web Audio Sounds Feel Cheap Without Envelope Shaping
+
+**Feature:** Sound effects for moves and game outcomes
+
+**What goes wrong:**
+Using `OscillatorNode` directly (easiest code-path for "no audio files") produces sounds that click/pop at start and end if the gain isn't shaped. An oscillator started at full gain and stopped abruptly produces an audible click (a DC discontinuity in the waveform). This is the most common Web Audio beginner mistake.
+
+**Prevention:**
+Always use a gain envelope for oscillator-based sounds:
+```js
+function playTone(audioCtx, masterGain, frequency, duration) {
+  const osc = audioCtx.createOscillator();
+  const env = audioCtx.createGain();
+  
+  osc.frequency.value = frequency;
+  osc.type = 'sine';
+  env.gain.setValueAtTime(0, audioCtx.currentTime);                  // start silent
+  env.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.01); // attack
+  env.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration); // decay
+  
+  osc.connect(env);
+  env.connect(masterGain); // masterGain controls global mute
+  osc.start(audioCtx.currentTime);
+  osc.stop(audioCtx.currentTime + duration);
+  osc.onended = () => { osc.disconnect(); env.disconnect(); };
+}
+```
+
+The attack ramp prevents the click at start; the exponential decay prevents the click at stop. Note: `exponentialRampToValueAtTime` cannot ramp to 0 — ramp to a very small value like 0.001 instead.
+
+**Phase:** Sound effects phase — use envelope shaping from the first sound implementation.
+
+---
+
+### Pitfall 16: CSS Variable Overrides in Dark Mode Miss Hardcoded Color Values
+
+**Feature:** Dark mode support
+
+**What goes wrong:**
+The existing CSS uses `var(--bg)`, `var(--surface)`, `var(--accent)`, `var(--text)`, `var(--text-dim)` consistently in most places. But there are hardcoded hex values:
+- `.cell:hover:not(.cell--taken)` uses `#1e2a4a` (a hardcoded hover color)
+- Error display in `main.js` uses `cssText` with hardcoded `color:#e94560; background:#1a1a2e`
+
+A `@media (prefers-color-scheme: light)` block that overrides CSS variables will correctly update all `var()` usages — but the hardcoded values stay dark regardless of the theme.
+
+**Prevention:**
+Audit for hardcoded colors before adding dark mode:
+- Replace `#1e2a4a` hover background with a new variable `--surface-hover`
+- The JS error display (`main().catch(err => {...})`) uses inline `cssText` — add a theme-appropriate fallback or ensure the error state also reads CSS variables
+
+```css
+:root {
+  --surface-hover: #1e2a4a;  /* new variable */
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --surface-hover: #e8e8f0;  /* light mode hover */
+  }
+}
+```
+
+**Detection:** Switch to light mode and visually inspect every element for remaining dark colors.
+
+**Phase:** Dark mode phase — audit for hardcoded hex values first.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| CSS piece animations | innerHTML wipe kills animation state (Pitfall 1) | Switch to incremental DOM updates or track last-placed cell index |
+| Win line animation | `overflow: hidden` clips overlay (Pitfall 2) | Add a wrapper element; place SVG overlay as sibling of board |
+| Computer delay | Timer not cancelled on reset causes ghost moves (Pitfall 5) | Store timer ID; cancel in `resetGame()` |
+| localStorage | Throws in incognito/private mode (Pitfall 6) | Always wrap in try/catch; degrade gracefully to in-memory |
+| Web Audio | Context suspended before user gesture (Pitfall 3) | Lazy init or explicit `resume()` on first interaction |
+| Web Audio | AudioBufferSourceNode leaks (Pitfall 4) | `onended = () => source.disconnect()` on every node |
+| Dark mode | FOUC if theme applied via JS before CSS loads (Pitfall 7) | Use CSS-only `@media` for initial theme; inline script only if manual toggle added |
+| Dark mode | Hardcoded hex values survive theme change (Pitfall 16) | Audit and replace all hardcoded colors with CSS variables |
+| Animations + delay | Status text out of sync with animation timing (Pitfall 13) | Chain animation completion → delay → computer move as sequential async flow |
+| Win line + restart | Fast-click dismisses win before animation completes (Pitfall 14) | Disable restart button for `WIN_ANIMATION_DURATION_MS` after game over |
+
+---
+
+## Existing Codebase Considerations
+
+Specific things about *this* codebase that affect v1.1 implementation:
+
+| Code Pattern | Impact on v1.1 | Recommendation |
+|-------------|----------------|----------------|
+| `boardEl.innerHTML = ''` in every `renderBoard()` | Animation classes added before render are destroyed | Must choose incremental update OR track "new cell" index before wipe |
+| `isProcessing` flag is synchronous guard | Works for delay, but `resetGame()` must cancel pending timer | Store `thinkingTimer` ID; cancel in `resetGame()` |
+| Score is in-memory `const score = {}` | Clean upgrade path to localStorage — just add load/save wrappers | Don't restructure score object; wrap access functions around it |
+| All CSS in a single `style.css` via `var()` | Dark mode via `@media (prefers-color-scheme: light)` works perfectly | Just override `:root` vars in the media query |
+| `overflow: hidden` on `.board` | Win line overlay must be a sibling, not a child | Add `.board-wrapper` with `position: relative` |
+| No existing `<audio>` elements or Audio API usage | Clean state — no legacy patterns to work around | Create AudioContext lazily on first user gesture |
+
+---
 
 ## Sources
 
-- [Rust and WebAssembly Book — Debugging](https://rustwasm.github.io/docs/book/reference/debugging.html) — HIGH confidence
-- [Rust and WebAssembly Book — Code Size](https://rustwasm.github.io/docs/book/reference/code-size.html) — HIGH confidence
-- [Rust and WebAssembly Book — Game of Life Implementation](https://rustwasm.github.io/docs/book/game-of-life/implementing.html) — HIGH confidence (JS↔WASM interface design principles)
-- [wasm-bindgen Reference — Exported Rust Types](https://rustwasm.github.io/docs/wasm-bindgen/reference/types/exported-rust-types.html) — HIGH confidence
-- [wasm-bindgen Reference — Passing Closures to JS](https://rustwasm.github.io/docs/wasm-bindgen/reference/passing-rust-closures-to-js.html) — HIGH confidence
-- [wasm-bindgen Reference — Weak References](https://rustwasm.github.io/docs/wasm-bindgen/reference/weak-references.html) — HIGH confidence
-- [wasm-bindgen Reference — Deployment](https://rustwasm.github.io/docs/wasm-bindgen/reference/deployment.html) — HIGH confidence
-- [wasm-pack Build Command](https://rustwasm.github.io/docs/wasm-pack/commands/build.html) — HIGH confidence
-- [serde-wasm-bindgen docs](https://docs.rs/serde-wasm-bindgen) via Context7 — HIGH confidence
+- [MDN: Web Audio API — Autoplay Policy](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices#autoplay_policy) — HIGH confidence (official, updated 2025-09-18)
+- [MDN: Web Audio API — Using the Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Using_Web_Audio_API) — HIGH confidence (official, updated 2025-09-18)
+- [MDN: Window.localStorage — Exceptions (SecurityError)](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage#exceptions) — HIGH confidence (official, updated 2025-11-30)
+- [MDN: prefers-color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme) — HIGH confidence (official, updated 2025-12-05)
+- Codebase analysis: `src/main.js`, `src/style.css`, `index.html` — HIGH confidence (direct inspection)
 
 ---
-*Pitfalls research for: Rust/WASM browser tic-tac-toe game*
-*Researched: 2026-04-12*
+*Pitfalls research for: v1.1 Polish & Feel milestone — CSS animations, Web Audio, localStorage, dark mode*
+*Researched: 2026-04-13*

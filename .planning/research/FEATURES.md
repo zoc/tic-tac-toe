@@ -1,194 +1,296 @@
-# Feature Research
+# Feature Landscape
 
 **Domain:** Browser-based casual game (tic-tac-toe vs computer)
-**Researched:** 2026-04-12
-**Confidence:** HIGH
+**Milestone scope:** v1.1 Polish & Feel — animation, persistence, audio, dark mode additions
+**Researched:** 2026-04-13
+**Confidence:** HIGH (MDN official docs + source code inspection)
 
-## Feature Landscape
+---
 
-### Table Stakes (Users Expect These)
+## Context: What Already Exists
 
-Features users assume exist. Missing these = product feels incomplete.
+v1.0 is complete. The following are already built and validated:
 
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| Playable 3x3 grid with click/tap input | It's the game. No grid = no game. | LOW | HTML/CSS grid or canvas; must handle both mouse and touch events |
-| Turn-based play (human X, computer O) | Core mechanic. Human makes a move, computer responds. | LOW | WASM handles game state; JS triggers computer move after human click |
-| Win/loss/draw detection | Game must end properly. Players need to know the outcome. | LOW | 8 possible win lines to check; straightforward in Rust |
-| Visual win line highlighting | Drawing a line through winning 3-in-a-row is fundamental to tic-tac-toe — it's how the game has been played on paper for centuries | MEDIUM | Animate a line/highlight across the three winning cells; CSS or SVG overlay |
-| Clear game outcome message | "You win!", "Computer wins!", "It's a draw!" — without this the game feels broken | LOW | Status text area or modal; update on game end |
-| New game / restart button | Players expect to play again instantly. Making them refresh = amateur hour. | LOW | Reset board state in WASM, clear UI |
-| Computer opponent that actually plays | A computer that doesn't respond, plays randomly, or plays perfectly is all bad. Must feel like a real opponent. | MEDIUM | Minimax with random mistake injection; tuning the mistake rate is the real work |
-| Turn indicator ("Your turn" / "Computer thinking...") | Without this, players don't know if the game is waiting for them or processing | LOW | Simple status text that updates on state change |
-| Responsive layout (works on phone + desktop) | Over 50% of casual game traffic is mobile. Non-responsive = half your audience lost. | MEDIUM | CSS responsive grid; touch targets need to be large enough (min 44px) |
-| Occupied cell rejection (can't overwrite a move) | Clicking a filled cell should do nothing (or show feedback). Letting players overwrite = game-breaking bug. | LOW | Check cell state before accepting move; already natural from game logic |
+| Already Built | Implementation |
+|---------------|----------------|
+| 3x3 CSS Grid board, X/O as text | CSS Grid, `renderBoard()` in main.js |
+| Win highlighting (3 cells lit) | `cell--winning` class, `cell--winning { background: var(--accent) !important }` |
+| Draw detection, game-over lockout | `game.get_status()`, `board--disabled` class |
+| Score tracking in memory | `score` object, `updateScoreDisplay()` |
+| Restart button | `resetGame()` + `hidden` toggle |
+| Keyboard navigation (tab + enter/space) | `tabIndex`, keydown listener |
+| Beatable AI (~25% mistake rate) | Rust minimax with random injection |
+| Thinking delay: **NOT BUILT** | Comment in code says "synchronous — no artificial delay" |
 
-### Differentiators (Competitive Advantage)
+**The 6 target features are all additive** — they enhance the existing foundation without changing game logic.
 
-Features that set the product apart. Not required, but valuable.
+---
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| Score tracking across games (W/L/D) | Adds replayability — players want to "beat their record" against the computer. Most basic implementations skip this. | LOW | Counter in JS; persist in localStorage for session survival |
-| Smooth CSS animations (piece placement, win celebration) | Polished feel separates this from thousands of bare-bones implementations. Animations make the game feel *alive*. | MEDIUM | CSS transitions for piece appear (scale/fade), win line draw animation, board reset transition |
-| Computer "thinking" delay | Instant computer response feels robotic and unsatisfying. A brief artificial delay (300-800ms) makes it feel like the computer is deliberating. | LOW | setTimeout wrapper around WASM AI call; consider random delay range for naturalness |
-| Winning celebration effect | Confetti, glow, shake, color burst — something that makes winning feel rewarding. Dopamine hit keeps players coming back. | MEDIUM | CSS keyframe animations or lightweight canvas particle effect |
-| Sound effects (move placement, win/lose) | Audio feedback makes interactions feel tangible. Casual games with sound feel significantly more polished. | MEDIUM | Web Audio API or simple `<audio>` elements; needs mute toggle; keep sounds short and satisfying |
-| Dark mode / theme support | Modern web expectation. Shows attention to detail. | LOW | CSS custom properties for theming; respect `prefers-color-scheme` |
-| Keyboard accessibility | Tab through cells, Enter/Space to place piece. Important for accessibility and completeness. | LOW | `tabindex` on cells, keyboard event handlers, focus styling |
-| Persistent scores (survive page refresh) | Players close the tab and come back — their score history is preserved. Small touch, big quality signal. | LOW | localStorage read/write; serialize score object as JSON |
-| WASM-powered game engine (Rust) | Technical differentiator — the game logic runs at near-native speed via WebAssembly. Most tic-tac-toe games use plain JS. While tic-tac-toe doesn't *need* WASM performance, it demonstrates Rust/WASM capabilities and provides a clean separation between game engine and UI. | HIGH | This is the core architecture decision. Rust + wasm-pack + wasm-bindgen. High complexity due to toolchain setup, not game logic. |
+## Table Stakes for This Milestone
 
-### Anti-Features (Commonly Requested, Often Problematic)
+Features expected in any polished casual game. Missing = feels unfinished.
 
-Features that seem good but create problems. These align with PROJECT.md's Out of Scope.
+| Feature | Why Expected | Complexity | Implementation Path |
+|---------|--------------|------------|---------------------|
+| Smooth piece placement animation | Every polished game animates pieces appearing. Bare text pop-in feels jarring by modern standards. Users notice within 2 clicks. | LOW | CSS `@keyframes` + `.cell--x`, `.cell--o` class triggers. Scale from 0 to 1, or fade in. Add animation to cell when X/O class is added. |
+| Persistent scores via localStorage | Players instinctively expect scores to survive a page refresh — they exist on every other game site. Score resetting on F5 feels like a bug. | LOW | `localStorage.setItem('ttt-score', JSON.stringify(score))` on every update. `getItem` + `JSON.parse` on init. Wrap in try/catch for SecurityError. |
+| Dark mode respecting prefers-color-scheme | The game already uses a dark navy theme! But users with light-mode OS should see adapted colors. `prefers-color-scheme` is a Baseline "Widely available" CSS feature (since Jan 2020). Not respecting it feels like an oversight for a modern web app. | LOW | `@media (prefers-color-scheme: light) { :root { --bg: ...; --surface: ...; } }` overrides. CSS custom properties already in `:root` make this trivial — only need a light-mode override block. |
+| Computer "thinking" delay (300–800ms) | Instant AI response feels robotic. Every board game with computer opponent (chess.com, lichess, casual games) adds an artificial pause. Without it, the game feels like a demo. v1.0 code already has a placeholder comment: *"Computer move is synchronous — no artificial delay (per CONTEXT.md Decision C)"* — this decision was explicitly deferred. | LOW | `setTimeout` wrapper in `handleCellClick()`. Convert synchronous `game.computer_move()` call to run inside 300–800ms timeout. The existing `isProcessing` guard and `board--disabled` class already provide the blocking needed. |
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| Online multiplayer | "Play with friends!" is the obvious next step | Requires server infrastructure, WebSocket handling, matchmaking, latency management, disconnection handling. Massively increases scope for a game that's fundamentally simple. Tic-tac-toe games online converge to all-draws between competent players. | Single-player focus with a well-tuned AI that feels fun to play against. The beatable AI *is* the multiplayer stand-in. |
-| Two-player local (pass-and-play) | "Let me play with someone sitting next to me" | Splits focus between AI experience and 2P experience. The AI tuning, computer thinking delay, and celebration effects all need separate paths. Also, 2P tic-tac-toe between adults always ends in draws — it's not fun. | Keep single-player focus. The computer opponent with personality (mistakes, "thinking") is more interesting than a human who plays perfectly. |
-| Difficulty selection (easy/medium/hard) | "Let me choose how hard the AI is" | Adds UI complexity (settings screen), requires tuning multiple difficulty levels, and "hard" on tic-tac-toe is just "never loses" which is frustrating. | Single beatable difficulty that plays well but makes occasional mistakes. One well-tuned experience beats three mediocre ones. |
-| Player choosing X or O | "Let me pick my symbol" | Adds pregame UI flow, complicates turn order logic, and the choice is purely cosmetic — it doesn't change gameplay. | Human is always X, always goes first. Simpler UX, faster to start playing. |
-| Move history / undo | React tutorial's "time travel" feature. Seems educational and useful. | Over-engineering for a casual game. Players want to play forward, not review moves. Adds state management complexity. Undo undermines the challenge of playing against AI. | No undo. Each game is quick (max 9 moves). Just start a new game if unhappy. |
-| Leaderboards / global rankings | "Compete with other players worldwide" | Requires backend server, user accounts, anti-cheat measures. Tic-tac-toe doesn't have meaningful skill differentiation for rankings. | Local score tracking is sufficient. "Beat your own record" against the computer. |
-| Board size options (4x4, 5x5) | "More complexity = more fun" | Changes the fundamental game. 4x4+ tic-tac-toe has very different strategy. Minimax becomes computationally expensive. The entire AI needs reworking. | Keep 3x3. It's what people expect from "tic-tac-toe." Variations are different games entirely. |
-| Achievements / badges system | Gamification is trendy | Over-engineering for a simple game. Adds persistent state management, UI for achievement display, trigger logic. The game loop is already ~30 seconds per game. | Score tracking provides enough meta-game. Win streaks are a natural achievement. |
+**Why these are "table stakes" for v1.1:** All four were explicitly listed in the prior FEATURES.md as P2 features ("add after validation"). v1.0 has been validated. These are now the baseline for a "finished product" feel rather than a demo.
 
-## Feature Dependencies
+---
+
+## Differentiators for This Milestone
+
+Features that set this implementation apart from the thousands of bare-bones tic-tac-toe implementations.
+
+| Feature | Value Proposition | Complexity | Implementation Path |
+|---------|-------------------|------------|---------------------|
+| Animated win line through winning cells | Most implementations just change the background color of winning cells (that's what v1.0 does). An animated line *drawing itself* through the three cells is rare and visually satisfying. Gives the moment of winning a theatrical quality. | MEDIUM | SVG overlay positioned absolutely over the board. Animate `stroke-dashoffset` from full line length to 0 — the classic "draw a line" animation. JS calculates start/end points for each of the 8 possible win lines. Requires knowing the win line direction from `game.get_winning_positions()` (already returns 3 cell indices). |
+| Sound effects with mute toggle | Sound feedback is the rarest feature in browser tic-tac-toe (competitor analysis: neither Neave's playtictactoe.org nor Google's embedded game has it). Audio feedback makes clicks feel tangible and wins feel rewarding. With a mute toggle, it's unobtrusive. | MEDIUM | Web Audio API with OscillatorNode — no file downloads needed. Synthesized beeps are tiny (zero bytes). Create a single shared `AudioContext` on first user interaction (satisfies autoplay policy). Three sounds: move click (short sine pulse ~200ms), win fanfare (rising 3-note sequence), lose buzz (falling tone). Mute state persisted in localStorage. |
+
+---
+
+## Anti-Features: What NOT to Build
+
+| Anti-Feature | Why It Seems Attractive | Why to Avoid | What to Do Instead |
+|--------------|------------------------|--------------|-------------------|
+| Confetti / particle effects | "Winning should be celebrated!" | A confetti library (canvas-confetti etc.) adds 20–40KB to the bundle. Tic-tac-toe games are ~30 seconds each — confetti covers the board and blocks the restart flow. Overkill for a casual game. | The animated win line + win sound together provide sufficient celebration without obscuring the board. |
+| CSS board flip/explosion on new game | "Board reset should be cinematic!" | Exit animations delay the new game start, frustrate repeat players, and are very hard to get right on the board-rebuild cycle (renderBoard clears innerHTML). | Simple board fade-in on reset is sufficient. The thinking delay and entry animations handle the pacing. |
+| Animated SVG X and O glyphs | Hand-drawn animated marks look impressive | High implementation cost (custom SVG path animation per cell, coordination with renderBoard's innerHTML-clear pattern), significant visual risk. The current clean text glyphs are faster to render and more readable. | Stick with text. Add CSS entry animation (scale, fade) on the text characters instead. |
+| Volume slider | "Let users control volume" | A range input adds UI chrome to a minimal interface. The mute toggle provides 80% of the value at 10% of the complexity. | Binary mute toggle (🔊/🔇 icon button). |
+| Theme switcher (manual light/dark toggle) | "Let users override their OS preference" | Adds a UI control, a persisted preference key, JavaScript logic to manage `data-theme` attribute. Significant complexity for minimal gain when `prefers-color-scheme` already handles the use case automatically. | Pure CSS `@media (prefers-color-scheme: light)` — zero JS, zero UI, respects user preference automatically. |
+| `localStorage` for game board state | "Restore game in progress after refresh" | Tic-tac-toe is a 30-second game. Mid-game persistence is not a felt pain point. Adds complexity to `renderBoard` and `init()` flow. | Only persist scores, not board state. |
+| Audio files (.mp3/.ogg) | "Better sound quality" | Requires HTTP requests, encoding decisions, format compatibility (`<audio>` fallbacks), and bundle size. | Web Audio API OscillatorNode produces clean synthesized tones with zero bytes. Perfect for game UI sounds. |
+
+---
+
+## Feature-by-Feature: Expected User-Visible Behavior
+
+### Feature 1: Smooth CSS Animations (Piece Placement)
+
+**Trigger:** Human clicks a cell or computer places O.
+**Visible behavior:** The X or O glyph appears with a quick entry animation — grows from 0 to full size with a slight overshoot (`cubic-bezier(0.34, 1.56, 0.64, 1)` "spring" easing), taking ~150–200ms. Feels snappy, not sluggish.
+**Board reset:** When "New Game" is clicked, the board clears (cells empty) with no exit animation (instant clear). New pieces animate in on placement as normal.
+**Win state:** Winning cells already get `cell--winning` background change. The win line SVG animation handles the celebration moment (see Feature 2).
+**Prefers-reduced-motion:** Must respect `@media (prefers-reduced-motion: reduce)` — animations should be disabled or instant for users with vestibular disorders. This is an accessibility requirement.
+
+**Implementation note:** The current `renderBoard()` clears `boardEl.innerHTML` and rebuilds all 9 cells. CSS animations must trigger on newly-added cells. Since cells are added to DOM fresh each time, `@keyframes` assigned to `.cell--x` and `.cell--o` will auto-trigger on insertion. No JS needed for the animation — just CSS.
+
+---
+
+### Feature 2: Animated Win Line
+
+**Trigger:** Game ends in a win (for either player).
+**Visible behavior:** After the win cells highlight (immediate), a line draws itself over the three winning cells — animating from one end to the other in ~400ms. Line is white or accent-colored, 4–6px thick. The draw effect uses SVG `stroke-dashoffset` animation (the "pen drawing a line" effect).
+**Position:** SVG overlay absolutely positioned over `#board` at `position: absolute; inset: 0; pointer-events: none`. Board needs `position: relative`.
+**8 possible lines:** horizontal (rows 0, 1, 2), vertical (cols 0, 1, 2), diagonal (TL→BR, TR→BL). JS computes SVG start/end `(x1, y1, x2, y2)` coordinates from the 3 winning cell indices returned by `game.get_winning_positions()`.
+**Cleanup:** SVG element removed or hidden when `resetGame()` is called.
+
+**Implementation note:** The SVG coordinate calculation is the most complex part. Each cell is 1/3 of board size. Center of cell at index `i`: `x = (col + 0.5) * (boardSize/3)`, `y = (row + 0.5) * (boardSize/3)`. Line length is computed at runtime from actual board pixel dimensions using `getBoundingClientRect()`. Must recalculate if viewport resizes.
+
+---
+
+### Feature 3: Computer "Thinking" Delay (300–800ms)
+
+**Trigger:** Human places a valid move and game is still in progress.
+**Visible behavior:** After human's move renders, the status shows "Computer is thinking…" and the board stays locked (already implemented via `board--disabled`). After 300–800ms delay, the computer's move appears (with piece animation from Feature 1). The delay makes the computer feel deliberate and prevents the jarring instant-response feel.
+**Random range:** `Math.random() * 500 + 300` — produces 300–800ms. The randomness prevents a rhythmic "beat" that would feel mechanical.
+**No WASM change:** The delay is pure JS (`setTimeout`). WASM `game.computer_move()` still executes synchronously inside the callback.
+
+**Implementation note:** Current code already has the `isProcessing` guard and `board--disabled` applied before the computer move. The only change is wrapping `game.computer_move()` in a `setTimeout`. The `async`/`await` pattern with a `delay()` helper is cleaner than nested callbacks.
+
+---
+
+### Feature 4: Persistent Scores via localStorage
+
+**Trigger:** Page load (read) and score update (write).
+**Visible behavior:** User wins 3 games, closes the tab, reopens the URL — score shows 3 wins. Score persists indefinitely (no expiration). In private/incognito, localStorage is available but cleared when tab closes (expected behavior, no special handling needed).
+**Key:** `'ttt-scores'` → JSON string `{"wins":3,"losses":1,"draws":2}`.
+**Read on init:** In `main()`, after WASM init, read localStorage and populate `score` object before `updateScoreDisplay()`.
+**Write on change:** In `handleGameOver()`, after incrementing `score.wins/losses/draws`, call `saveScore()`.
+**Error handling:** Wrap in try/catch — `localStorage` throws `SecurityError` when cookies are blocked or origin is `file://`. Fall back silently to in-memory score.
+
+**Implementation note:** This is the simplest of the 6 features. ~10 lines of JS. No UI change needed — the existing scoreboard display is reused.
+
+---
+
+### Feature 5: Sound Effects with Mute Toggle
+
+**Trigger:** Move placement, win, loss, draw.
+**Visible behavior:**
+- **Move sound:** Short, satisfying click/plop (~150ms). Sine wave, 220Hz, fast decay. Distinct for X vs O (optional).
+- **Win sound:** Brief ascending 3-note sequence (~400ms). Feels celebratory without being obnoxious.
+- **Lose sound:** Falling tone (~300ms). Sad but brief.
+- **Draw sound:** Neutral 2-tone (~250ms). Neither win nor lose.
+- **Mute button:** Icon button (🔊/🔇) in header area. Clicking toggles mute state. State persisted in localStorage (`'ttt-muted'`).
+
+**Web Audio API approach (recommended over `<audio>` elements):**
+- Single `AudioContext` instance, created lazily on first user interaction (satisfies autoplay policy)
+- `AudioContext.state` may be `'suspended'` if created outside click event — call `audioCtx.resume()` inside click handler
+- Each sound: `createOscillator()` → configure frequency/type → `createGain()` → schedule `gain.exponentialRampToValueAtTime(0.001, ...)` for decay → `connect(audioCtx.destination)` → `oscillator.start()` → `oscillator.stop(t + duration)`
+- Oscillators are created fresh per sound (they're one-shot — `OscillatorNode` cannot be restarted after `stop()`)
+- Mute: check `muted` flag before calling `play*` functions, OR set `masterGain.gain.value = 0`
+
+**Why Web Audio API over `<audio>` elements:**
+- Zero file size (synthesized tones)
+- Precise timing control
+- No HTTP requests
+- Works offline
+- No audio format compatibility issues
+- Perfect for short game UI sounds
+
+**Accessibility note (MDN confirmed):** Sound must be user-controlled. The mute toggle satisfies this requirement. `aria-pressed` on the mute button communicates state to screen readers.
+
+---
+
+### Feature 6: Dark Mode (prefers-color-scheme)
+
+**Trigger:** OS/browser dark mode setting changes.
+**Visible behavior:**
+- **Dark OS (current):** Unchanged — dark navy/red theme already looks correct.
+- **Light OS:** Background becomes light gray/white, text becomes dark, cells become white/light gray, accent color (red) remains. The board still has clear contrast. Score display adapts.
+- **Dynamic:** If user switches OS theme mid-session, CSS media query responds immediately without page refresh.
+
+**Implementation approach — pure CSS (no JS required):**
+```css
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:      #f0f0f5;
+    --surface: #ffffff;
+    --text:    #1a1a2e;
+    --text-dim: #666;
+  }
+  /* accent (--accent: #e94560) stays — red works on both themes */
+}
+```
+
+**Why pure CSS not JS:** `window.matchMedia('(prefers-color-scheme: dark)')` + JS `addEventListener` approach is unnecessary complexity when the same result is achieved with a single `@media` block. CSS custom properties on `:root` mean all color usages inherit automatically.
+
+**Manual override question:** The scope explicitly says "respecting prefers-color-scheme" — this means automatic, no manual toggle. A toggle button is an anti-feature for this milestone (see Anti-Features section).
+
+**Board gap color:** The board background is `var(--accent)` (red), which forms the grid lines. This intentionally stays constant across themes — red grid lines on both dark and light themes is the brand identity.
+
+---
+
+## Feature Dependencies on Existing Code
 
 ```
-[Playable Grid]
-    └──requires──> [Game State Engine (WASM)]
-                       └──requires──> [Win/Loss/Draw Detection]
-                                          └──enables──> [Win Line Highlighting]
-                                          └──enables──> [Game Outcome Message]
-                                          └──enables──> [Score Tracking]
+[Feature 1: CSS Animations]
+    └──modifies──> style.css (add @keyframes, animation to .cell--x, .cell--o)
+    └──requires──> renderBoard() builds cells with .cell--x/.cell--o classes (already does)
+    └──must-add──> @media (prefers-reduced-motion) override
 
-[Computer Opponent (AI)]
-    └──requires──> [Game State Engine (WASM)]
-    └──enhanced-by──> [Thinking Delay]
+[Feature 2: Win Line Animation]
+    └──requires──> game.get_winning_positions() returns 3 indices (already works)
+    └──requires──> #board has position: relative (add to style.css)
+    └──modifies──> handleGameOver() — create SVG overlay after win
+    └──modifies──> resetGame() — remove SVG overlay
+    └──depends-on──> Feature 1 (piece animations) visually precede the line
 
-[New Game Button]
-    └──requires──> [Game State Engine (WASM)]
-    └──resets──> [Playable Grid]
+[Feature 3: Thinking Delay]
+    └──modifies──> handleCellClick() — wrap computer_move() in setTimeout
+    └──requires──> isProcessing guard (already exists)
+    └──requires──> board--disabled class (already applied before computer move)
+    └──no WASM changes needed
 
-[Score Tracking]
-    └──enhanced-by──> [Persistent Scores (localStorage)]
+[Feature 4: localStorage]
+    └──modifies──> main() — read score from localStorage on init
+    └──modifies──> handleGameOver() — write score after increment
+    └──adds──> saveScore() helper function
+    └──adds──> loadScore() helper function
+    └──independent of all other features
 
-[Animations]
-    └──enhances──> [Playable Grid] (piece placement)
-    └──enhances──> [Win Line Highlighting] (win celebration)
-    └──enhances──> [New Game Button] (board reset transition)
+[Feature 5: Sound Effects]
+    └──adds──> audio.js module (or inline in main.js)
+    └──adds──> mute button to index.html
+    └──modifies──> handleCellClick() — play move sound after valid move
+    └──modifies──> handleGameOver() — play win/lose/draw sound
+    └──modifies──> style.css — mute button styles
+    └──modifies──> localStorage — persist mute preference
+    └──requires──> AudioContext created on first user interaction (click event)
 
-[Sound Effects]
-    └──enhances──> [Playable Grid] (move sound)
-    └──enhances──> [Win Line Highlighting] (win/lose sound)
-    └──independent (can be added anytime)]
-
-[Responsive Layout]
-    └──affects──> [Playable Grid] (touch targets, sizing)
-    └──independent (CSS layer, no logic dependency)]
+[Feature 6: Dark Mode]
+    └──modifies──> style.css only (add @media block)
+    └──independent of all other features
+    └──no JS, no HTML changes
 ```
 
-### Dependency Notes
+---
 
-- **Win Line Highlighting requires Win Detection:** Must know which 3 cells won before you can highlight them. The WASM engine should return the winning line coordinates, not just a boolean.
-- **Score Tracking requires Win Detection:** Can only increment W/L/D counters after game outcome is determined.
-- **Computer AI requires Game State Engine:** AI evaluates the board state to choose its move. Both live in Rust/WASM.
-- **Thinking Delay enhances AI:** The delay wraps the AI call on the JS side — the WASM returns instantly, JS adds the delay for UX.
-- **Animations are independent layers:** CSS animations layer on top of game logic. Can be added progressively without changing core functionality.
-- **Sound Effects are fully independent:** Can be added at any phase without modifying game logic or UI structure.
+## Complexity Summary
 
-## MVP Definition
+| Feature | Complexity | Estimated LOC | Risk |
+|---------|------------|---------------|------|
+| CSS animations (piece placement) | LOW | 20–30 CSS | LOW — pure CSS, no JS logic |
+| Animated win line | MEDIUM | 30–50 JS + 10 CSS | MEDIUM — SVG coordinate math, viewport-relative sizing |
+| Thinking delay | LOW | 10–15 JS | LOW — setTimeout wrapper, flag already exists |
+| localStorage persistence | LOW | 20–30 JS | LOW — well-understood API, just needs try/catch |
+| Sound effects + mute | MEDIUM | 60–80 JS | MEDIUM — AudioContext autoplay policy, state management, mute persistence |
+| Dark mode (CSS only) | LOW | 10–15 CSS | LOW — pure CSS media query overrides |
+| **Total estimate** | | **~150–200 LOC** | |
 
-### Launch With (v1)
+---
 
-Minimum viable product — a complete, playable, polished game.
+## Implementation Order Recommendation
 
-- [ ] Rust/WASM game engine (board state, move validation, win detection) — the core technical foundation
-- [ ] 3x3 grid rendered in browser with click/tap input — the game surface
-- [ ] Computer opponent with beatable AI (imperfect minimax) — the single-player experience
-- [ ] Win/loss/draw detection with winning line highlighting — game completion feedback
-- [ ] Game outcome message ("You win!", etc.) — clear communication of results
-- [ ] Turn indicator — so the player always knows what's happening
-- [ ] New game / restart button — instant replay
-- [ ] Score tracking (wins, losses, draws) — replayability hook
-- [ ] Responsive layout — works on phone and desktop
-- [ ] Occupied cell rejection — basic input validation
+**Suggested order (each is independent but some build nicely on each other):**
 
-### Add After Validation (v1.x)
+1. **Dark mode** — Pure CSS, zero risk, zero interdependency. Gets it out of the way immediately. (~15 min)
+2. **localStorage** — Isolated JS change, easy to test independently. (~20 min)
+3. **Thinking delay** — Small isolated change to `handleCellClick()`. Test carefully with the `isProcessing` guard. (~15 min)
+4. **CSS animations (piece placement)** — Add after thinking delay so animations can be tested with the natural pace the delay provides. (~30 min)
+5. **Sound effects + mute** — Requires AudioContext setup and autoplay policy awareness. Test across all 3 outcomes. (~60 min)
+6. **Animated win line** — Most complex feature. Build last when all other polish is visible. SVG math is the only real challenge. (~60 min)
 
-Features to add once core game is solid and fun.
+**Why this order:**
+- Low-complexity features first builds confidence
+- Thinking delay before animations: the delay makes animations more visible/testable
+- Sound last (before win line) because it needs careful autoplay testing
+- Win line last because it depends on win state being visually complete (pieces rendered, win cells highlighted)
 
-- [ ] CSS animations (piece placement, board transitions) — adds polish and life to the game
-- [ ] Win celebration effect (confetti, glow, or similar) — makes winning feel rewarding
-- [ ] Computer "thinking" delay (300-800ms) — makes the AI feel deliberate, not robotic
-- [ ] Sound effects with mute toggle — tactile audio feedback
-- [ ] Persistent scores via localStorage — scores survive page refresh
-- [ ] Dark mode / prefers-color-scheme support — modern web standard
+---
 
-### Future Consideration (v2+)
+## API Browser Compatibility (Confirmed via MDN Baseline)
 
-Features to defer until the core experience is validated.
+| API / Feature | Baseline Status | Notes |
+|---------------|-----------------|-------|
+| `localStorage` | Widely available (since July 2015) | Universal. No compatibility concerns. |
+| `prefers-color-scheme` | Widely available (since Jan 2020) | Universal. No polyfill needed. |
+| Web Audio API (`AudioContext`, `OscillatorNode`, `GainNode`) | Widely available (since July 2015) | Universal in Chrome, Firefox, Safari, Edge. `AudioContext` may be `webkitAudioContext` on very old Safari but modern Safari (2020+) uses standard name. |
+| CSS `@keyframes` + `animation` | Universal | No concerns for target browsers. |
+| `prefers-reduced-motion` | Widely available | Must implement for accessibility. |
+| SVG `stroke-dashoffset` animation | Universal | CSS animatable property, widely supported. |
 
-- [ ] Keyboard accessibility (tab navigation, enter to place) — important for a11y but not launch-blocking
-- [ ] Animated SVG X and O pieces (hand-drawn style) — distinctive visual identity
-- [ ] Tutorial/hint system for new players — gentle guidance on strategy
+All 6 features work in Chrome, Firefox, Safari (modern), and Edge — the stated target browsers.
 
-## Feature Prioritization Matrix
+---
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| Playable 3x3 grid | HIGH | LOW | P1 |
-| WASM game engine | HIGH | HIGH | P1 |
-| Computer opponent (AI) | HIGH | MEDIUM | P1 |
-| Win/loss/draw detection | HIGH | LOW | P1 |
-| Win line highlighting | HIGH | MEDIUM | P1 |
-| Game outcome message | HIGH | LOW | P1 |
-| Turn indicator | MEDIUM | LOW | P1 |
-| New game button | HIGH | LOW | P1 |
-| Responsive layout | HIGH | MEDIUM | P1 |
-| Score tracking | MEDIUM | LOW | P1 |
-| CSS animations | MEDIUM | MEDIUM | P2 |
-| Thinking delay | MEDIUM | LOW | P2 |
-| Win celebration | MEDIUM | MEDIUM | P2 |
-| Sound effects | LOW | MEDIUM | P2 |
-| Persistent scores | LOW | LOW | P2 |
-| Dark mode | LOW | LOW | P2 |
-| Keyboard accessibility | MEDIUM | LOW | P3 |
+## Pitfall Preview (Documented in PITFALLS.md)
 
-**Priority key:**
-- P1: Must have for launch — without these, it's not a game
-- P2: Should have, adds polish — the difference between "demo" and "product"
-- P3: Nice to have, future consideration
+| Feature | Key Pitfall |
+|---------|-------------|
+| Sound effects | `AudioContext` created outside user gesture starts in `'suspended'` state — must call `audioCtx.resume()` inside click handler |
+| Sound effects | `OscillatorNode` is a one-shot source — **cannot** be restarted after `stop()`. Create a fresh oscillator for each sound. |
+| Win line SVG | `renderBoard()` uses `boardEl.innerHTML = ''` — any SVG appended to `boardEl` gets wiped. SVG must be a **sibling** of `#board`, not a child. |
+| CSS animations | `renderBoard()` rebuilds the entire DOM — `animation-fill-mode: forwards` may cause brief flash on re-render. Use `both` mode. |
+| Thinking delay | If human clicks rapidly (double-click), the `isProcessing` flag must be set **synchronously** before the setTimeout, not inside the callback. (It already is in v1.0 code.) |
+| localStorage | `JSON.parse(null)` returns `null` (first visit, no stored score) — must handle null case in `loadScore()`. |
 
-## Competitor Feature Analysis
-
-| Feature | playtictactoe.org (Neave) | Google Search TTT | PaperGames.io | Our Approach |
-|---------|---------------------------|-------------------|---------------|--------------|
-| Grid rendering | Clean retro SVG | Inline game widget | Full web app | CSS grid with animations |
-| Computer AI | Yes, difficulty unclear | Yes, 3 difficulty levels | Yes, online only | Beatable imperfect minimax |
-| Score tracking | Yes (session) | No | Yes (with accounts) | Yes, local + persistent |
-| Win highlighting | Yes, line animation | Yes, line through winning cells | Yes | Animated line overlay |
-| Two-player mode | Yes (local) | Yes (local) | Yes (online) | No — deliberate single-player focus |
-| Animations | Minimal | Minimal | Moderate | Rich (our differentiator) |
-| Sound effects | No | No | No | Yes (our differentiator) |
-| Difficulty options | No | Easy/Medium/Impossible | Via opponent skill | No — single well-tuned level |
-| Mobile support | Yes | Yes | Yes | Yes, responsive-first |
-| Visual polish | Retro aesthetic, clean | Basic Google UI | Gaming site aesthetic | Modern, polished, animated |
-| Technology | JavaScript | JavaScript | JavaScript | Rust/WASM (unique) |
-
-**Key insight:** Most existing tic-tac-toe web games are visually basic. They nail the gameplay but skimp on polish (no animations, no sound, minimal celebration). Our opportunity is to deliver the same solid gameplay with noticeably more visual and audio polish — making it feel like a *product* rather than a *tutorial exercise*. The Rust/WASM architecture is a unique technical differentiator even if end-users don't directly perceive it.
+---
 
 ## Sources
 
-- playtictactoe.org (Neave Interactive) — Leading browser tic-tac-toe implementation
-- PaperGames.io/tic-tac-toe — Feature-rich online gaming platform version
-- React.dev tutorial — Classic tic-tac-toe implementation with move history
-- Wikipedia: Tic-tac-toe — Game theory, strategy, solved game analysis
-- MDN Web Docs: Introduction to Game Development — Web platform capabilities for games
-- Google Search embedded tic-tac-toe game — Mass-market baseline
+- MDN Web Docs: Web Audio API — Using the Web Audio API (updated Sep 18, 2025) — **HIGH confidence**
+- MDN Web Docs: Web Audio API Best Practices (updated Sep 18, 2025) — **HIGH confidence**
+- MDN Web Docs: OscillatorNode (updated Aug 27, 2025) — **HIGH confidence**
+- MDN Web Docs: Window.localStorage (updated Nov 30, 2025) — **HIGH confidence**
+- MDN Web Docs: prefers-color-scheme (updated Dec 5, 2025) — **HIGH confidence**
+- v1.0 source code inspection: src/main.js (215 lines), src/style.css (186 lines) — **HIGH confidence**
+- Competitor analysis (v1.0 research, 2026-04-12): playtictactoe.org (Neave), Google TTT, PaperGames.io — **MEDIUM confidence**
 
 ---
-*Feature research for: browser-based tic-tac-toe (Rust/WASM)*
-*Researched: 2026-04-12*
+
+*Feature research for: browser-based tic-tac-toe v1.1 Polish & Feel (Rust/WASM)*
+*Researched: 2026-04-13*

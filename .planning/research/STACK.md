@@ -1,181 +1,405 @@
-# Stack Research
+# Technology Stack
 
-**Domain:** Rust-to-WebAssembly browser game (tic-tac-toe)
-**Researched:** 2026-04-12
-**Confidence:** HIGH
+**Project:** Tic-Tac-Toe WASM — v1.1 Polish & Feel
+**Researched:** 2026-04-13
+**Confidence:** HIGH (v1.0 base stack validated; new additions all native browser APIs — no npm deps required)
 
-## Recommended Stack
+---
 
-### Core Technologies
+## What This Milestone Adds vs. v1.0
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Rust (stable) | 1.94.1 | Game logic language | Memory-safe, compiles to compact WASM; the dominant language for WASM targeting browsers. Installed via `rustup`. |
-| wasm-bindgen | 0.2.118 | Rust↔JS interop bindings | The canonical bridge between Rust/WASM and JavaScript. Generates TypeScript definitions, handles type marshalling. Every Rust-WASM project uses this. |
-| wasm-pack | 0.14.0 | Build tool (Rust → WASM pkg) | Wraps `cargo build --target wasm32-unknown-unknown` + `wasm-bindgen-cli` + `wasm-opt` into a single command. Outputs a ready-to-import `pkg/` directory with `.wasm`, JS glue, and `package.json`. |
-| web-sys | 0.3.95 | Browser API bindings for Rust | Provides typed Rust bindings to DOM, Canvas, Events, etc. Feature-gated — only import what you use. For this project we need minimal DOM features (the JS side handles rendering). |
-| js-sys | 0.3.95 | JavaScript built-in bindings | Typed access to `Math`, `Array`, `Date`, etc. from Rust. Companion to web-sys. Useful if any JS built-ins are needed from the Rust side. |
-| Vite | 8.0.8 | Frontend dev server & bundler | Fast HMR, native ESM, zero-config for HTML/CSS/JS. Handles WASM import with plugin. The standard choice for modern frontend tooling — replaces Webpack. |
-| HTML/CSS/JS (vanilla) | ES2022+ | Frontend rendering & UI | PROJECT.md specifies "no heavy framework needed." For a tic-tac-toe game, vanilla JS with CSS animations is the right call — no React/Vue overhead for 9 squares. |
+| v1.0 (validated, do not re-research) | v1.1 (this document) |
+|---------------------------------------|----------------------|
+| Rust/WASM game engine via wasm-pack | CSS animations for piece placement |
+| Vite 8 + vite-plugin-wasm | Animated SVG win line |
+| Vanilla JS + CSS Grid board | `setTimeout`-based thinking delay |
+| In-memory score tracking | Persistent scores via `localStorage` |
+| Dark navy/red theme | Sound effects via Web Audio API |
+| | Dark mode via `prefers-color-scheme` |
 
-### Supporting Libraries (Rust side)
+**Net new npm dependencies: 0**
+**Net new Rust/WASM changes: 0**
+All six features are implementable with native browser platform APIs.
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| serde | 1.0.228 | Serialization framework | Derive `Serialize`/`Deserialize` on game state structs so they can cross the WASM boundary cleanly. |
-| serde-wasm-bindgen | 0.6.5 | Serde ↔ JsValue bridge | Convert Rust structs directly to native JS objects (not JSON strings). Faster and smaller than `serde_json` for WASM. Use `to_value()` / `from_value()`. |
-| rand | 0.10.1 | Random number generation | Powers the "beatable AI" — minimax with random mistake injection. Requires `getrandom` WASM feature. |
-| getrandom | 0.4.2 | Platform RNG backend | Required by `rand` for entropy in WASM. Must enable the `wasm_js` feature to use browser `crypto.getRandomValues()`. |
-| console_error_panic_hook | 0.1.7 | WASM panic debugging | Forwards Rust panics to `console.error()` with full backtraces. Essential for development — WASM panics are otherwise silent `unreachable` traps. |
-| console_log | 1.0.0 | Rust `log` → browser console | Bridges the Rust `log` crate to `console.log()`. Optional but helpful during development. |
-| wasm-bindgen-test | 0.3.68 | WASM unit testing | Run `#[wasm_bindgen_test]` functions in headless browsers via `wasm-pack test`. Dev dependency only. |
+---
 
-### Supporting Libraries (JS side)
+## New Capability Analysis
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| vite-plugin-wasm | 3.6.0 | WASM ESM import support | Lets Vite import `.wasm` files as ES modules. Required for `import init from './pkg'` pattern to work. |
-| vite-plugin-top-level-await | 1.6.0 | Top-level `await` in modules | WASM init is async. This plugin enables `await init()` at module top level for broader browser compat. Not needed if `build.target = "esnext"`. |
+### Feature 1: Smooth CSS Animations — Piece Placement & Board Transitions
 
-### Development Tools
+**Implementation:** Pure CSS — `@keyframes` + `animation` property
+**New dependencies:** None
 
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| rustup | Rust toolchain manager | Install with `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| wasm32-unknown-unknown target | WASM compilation target | Add with `rustup target add wasm32-unknown-unknown` |
-| wasm-pack | Build orchestrator | Install with `cargo install wasm-pack` or `curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf \| sh` |
-| cargo | Rust package manager | Comes with rustup. Manages Rust dependencies. |
-| npm / Node.js | JS package manager | For Vite, dev server, and JS dependencies. Node 20+ recommended. |
-| wasm-opt (via wasm-pack) | WASM binary optimizer | wasm-pack runs this automatically on release builds. Shrinks `.wasm` by 10-30%. No separate install needed. |
+CSS `@keyframes` animations are "Baseline Widely available" across all target browsers (Chrome, Firefox, Safari, Edge) since well before 2020. The existing `style.css` already uses `transition` for hover states — `@keyframes` is the natural extension for entrance animations.
 
-## Installation
+**Approach:**
+- Add a `pop-in` keyframe (scale 0→1 with cubic-bezier overshoot) applied via `.cell--x` and `.cell--o` when cells are rendered
+- Trigger by adding the CSS class when the cell DOM element is created in `renderBoard()`
+- Use `transform: scale()` (GPU-composited, no layout reflow) — safe for `will-change: transform`
+- Add `@media (prefers-reduced-motion: reduce)` override to skip animations for accessibility
 
-```bash
-# 1. Rust toolchain (if not already installed)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup target add wasm32-unknown-unknown
+**Integration point:** `src/style.css` (keyframe definition) + `src/main.js` `renderBoard()` (class assignment when value !== 0)
 
-# 2. wasm-pack
-cargo install wasm-pack
+```css
+@keyframes pop-in {
+  0%   { transform: scale(0.4); opacity: 0; }
+  70%  { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
 
-# 3. JS dependencies (from project root, after npm init)
-npm install -D vite vite-plugin-wasm vite-plugin-top-level-await
+.cell--x, .cell--o {
+  animation: pop-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell--x, .cell--o { animation: none; }
+}
 ```
 
-### Cargo.toml (Rust project)
+---
 
-```toml
-[package]
-name = "tic-tac-toe"
-version = "0.1.0"
-edition = "2024"
+### Feature 2: Animated Win Line
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+**Implementation:** Inline SVG `<line>` element with CSS stroke-dashoffset animation
+**New dependencies:** None
 
-[dependencies]
-wasm-bindgen = "0.2"
-serde = { version = "1.0", features = ["derive"] }
-serde-wasm-bindgen = "0.6"
-rand = { version = "0.10", features = ["std", "std_rng"] }
-getrandom = { version = "0.4", features = ["wasm_js"] }
-console_error_panic_hook = "0.1"
+The standard technique for "drawing" a line in CSS is `stroke-dasharray` + `stroke-dashoffset` animation. This is pure CSS on an inline SVG overlaid on the board. No canvas, no library.
 
-[dev-dependencies]
-wasm-bindgen-test = "0.3"
+**Approach:**
+- Add an absolutely positioned `<svg>` overlay inside `.board` (or appended by JS)
+- JS injects a `<line>` from start-cell center to end-cell center based on `winningPositions`
+- CSS animates `stroke-dashoffset` from `line-length` to `0` over ~400ms
+- Coordinates calculated from cell size: `boardSize / 3` per cell, center = `cellSize * col + cellSize/2`
 
-[profile.release]
-opt-level = "z"    # Optimize for size (small .wasm)
-lto = true         # Link-time optimization
+**Integration point:**
+- `index.html`: add `<svg class="win-line-overlay" ...>` inside `.board`
+- `src/style.css`: `.win-line-overlay` positioned `absolute`, pointer-events none; `@keyframes draw-line`
+- `src/main.js`: `handleGameOver()` computes line endpoints from `winningPositions[0]` and `winningPositions[2]`, sets SVG `<line>` attributes and triggers animation class
+
+```css
+@keyframes draw-line {
+  from { stroke-dashoffset: var(--line-length); }
+  to   { stroke-dashoffset: 0; }
+}
+
+.win-line {
+  stroke: #fff;
+  stroke-width: 6px;
+  stroke-linecap: round;
+  animation: draw-line 0.4s ease-out forwards;
+}
 ```
 
-### vite.config.js
+**Key detail:** Set `stroke-dasharray` and `stroke-dashoffset` both to the line's pixel length (computed via JS `line.getTotalLength()` or manual `Math.hypot(dx, dy)`). The `board` needs `position: relative` (already set for overflow hidden) and the SVG needs `position: absolute; inset: 0; width: 100%; height: 100%`.
 
-```javascript
-import { defineConfig } from 'vite';
-import wasm from 'vite-plugin-wasm';
-import topLevelAwait from 'vite-plugin-top-level-await';
+---
 
-export default defineConfig({
-  plugins: [wasm(), topLevelAwait()],
-  build: {
-    target: 'esnext',
-  },
-});
+### Feature 3: Computer "Thinking" Delay (300–800ms)
+
+**Implementation:** `setTimeout` in existing `handleCellClick` — pure JS refactor
+**New dependencies:** None
+
+The current code calls `game.computer_move()` synchronously inline. Converting to `setTimeout` wraps the existing logic in a closure.
+
+**Approach:**
+- Replace the synchronous computer move block with `setTimeout(() => { ... }, delay)`
+- Delay = random value in [300, 800]ms: `300 + Math.random() * 500`
+- The `isProcessing` flag and `board--disabled` class are set *before* the timeout (already done) — no change needed there
+- Cancel pending timeout on `resetGame()` with `clearTimeout(thinkingTimer)`
+
+**Integration point:** `src/main.js` — `handleCellClick()` and `resetGame()`
+
+```js
+const THINKING_MIN = 300;
+const THINKING_MAX = 800;
+let thinkingTimer = null;
+
+// In handleCellClick, replace synchronous computer_move() block:
+thinkingTimer = setTimeout(() => {
+  const compPos = game.computer_move();
+  // ... rest of existing logic unchanged
+}, THINKING_MIN + Math.random() * (THINKING_MAX - THINKING_MIN));
+
+// In resetGame():
+clearTimeout(thinkingTimer);
+thinkingTimer = null;
 ```
 
-### Build command
+---
 
-```bash
-# Build WASM package (outputs to pkg/)
-wasm-pack build --target web
+### Feature 4: Persistent Scores via localStorage
 
-# Run Vite dev server
-npx vite
+**Implementation:** `window.localStorage` — native browser API
+**New dependencies:** None
+
+`localStorage` is "Baseline Widely available" since July 2015 (MDN). It persists key/value strings across sessions for the same origin. The current `score` object is in-memory; persistence requires wrapping read/write with `localStorage`.
+
+**Approach:**
+- On startup: read `localStorage.getItem('ttt-score')`, parse JSON, hydrate the `score` object
+- On score update: `localStorage.setItem('ttt-score', JSON.stringify(score))`
+- Defensive: wrap in `try/catch` — `localStorage` throws `SecurityError` in `file://` URLs and when storage is blocked by user preferences
+- Store schema: `{ wins: N, losses: N, draws: N }` — simple, forward-compatible
+
+**Integration point:** `src/main.js`
+
+```js
+const SCORE_KEY = 'ttt-score';
+
+function loadScore() {
+  try {
+    const saved = localStorage.getItem(SCORE_KEY);
+    if (saved) Object.assign(score, JSON.parse(saved));
+  } catch { /* blocked or file:// — silent fallback to in-memory */ }
+}
+
+function persistScore() {
+  try {
+    localStorage.setItem(SCORE_KEY, JSON.stringify(score));
+  } catch { /* quota exceeded or blocked — silent */ }
+}
 ```
 
-## Alternatives Considered
+**Call sites:** `loadScore()` before `updateScoreDisplay()` in `main()`, `persistScore()` after each score increment in `handleGameOver()`.
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| wasm-pack + Vite | Trunk (Rust-centric bundler) | If the entire app were in Rust (e.g., Yew/Leptos SPA). For our split architecture (Rust logic + vanilla JS UI), wasm-pack + Vite gives better DX for the frontend side. |
-| `--target web` | `--target bundler` | When using Webpack as the bundler. Vite works with both, but `--target web` produces standalone ES modules that also work without any bundler — simpler and more portable. |
-| Vanilla JS | Yew / Leptos (Rust UI frameworks) | If building a complex SPA entirely in Rust. For 9 squares with CSS animations, vanilla JS is dramatically simpler with zero compile overhead for UI changes. |
-| serde-wasm-bindgen | serde_json (string serialization) | Never for this project. serde-wasm-bindgen converts directly to JS objects, avoiding JSON.parse() overhead. serde_json makes sense only when you need JSON-formatted strings. |
-| rand 0.10 | `js_sys::Math::random()` | If you want zero Rust-side RNG dependencies. But `rand` provides proper distributions and the `Rng` trait, making imperfect minimax cleaner to implement. |
-| Vite | Webpack 5 | If you're locked into an existing Webpack config. Vite is faster, simpler, and has first-class WASM plugin support. No reason to choose Webpack for a greenfield project. |
+---
 
-## What NOT to Use
+### Feature 5: Sound Effects with Mute Toggle
+
+**Implementation:** Web Audio API (`AudioContext` + `OscillatorNode` + `GainNode`) — native browser API
+**New dependencies:** None
+**⚠️ Critical: Autoplay Policy**
+
+Web Audio is "Baseline Widely available" since April 2021 (MDN). However, all browsers block `AudioContext` from producing sound until a user gesture has occurred on the page. This is critical for our game:
+
+- **Safe:** First sound fires on a cell click (user gesture) — this satisfies the browser autoplay policy
+- **Unsafe:** Any sound fired on page load (before interaction) — will be blocked silently
+
+The game already waits for click interaction before any game logic runs, so the autoplay constraint is naturally satisfied.
+
+**Why Web Audio API over `<audio>` elements?** For short, synthesized game sounds (100–300ms), Web Audio `OscillatorNode` produces sounds programmatically with zero file assets, no loading delay, and precise timing. No `.mp3`/`.ogg` files to ship. The sounds (place move, computer move, win, loss, draw) are simple tones — perfect for oscillators.
+
+**Approach:**
+- Single shared `AudioContext` created lazily on first click
+- Factory function `playSound(type)` creates `OscillatorNode` → `GainNode` → `destination`, plays, and auto-disconnects after duration
+- Mute toggle: `GainNode` master gain set to 0 when muted, 1 when unmuted
+- Mute state persisted in `localStorage` key `'ttt-muted'`
+- Add mute button `<button id="mute-btn">` to `index.html`
+
+```js
+let audioCtx = null;
+let masterGain = null;
+let isMuted = false;
+
+function ensureAudio() {
+  if (audioCtx) return;
+  audioCtx = new AudioContext();
+  masterGain = audioCtx.createGain();
+  masterGain.connect(audioCtx.destination);
+  masterGain.gain.value = isMuted ? 0 : 1;
+}
+
+function playSound(type) {
+  ensureAudio();
+  const sounds = {
+    place:    { freq: 440, duration: 0.08, type: 'sine' },
+    computer: { freq: 300, duration: 0.08, type: 'sine' },
+    win:      { freq: 660, duration: 0.35, type: 'triangle' },
+    loss:     { freq: 220, duration: 0.4,  type: 'sawtooth' },
+    draw:     { freq: 380, duration: 0.25, type: 'sine' },
+  };
+  const s = sounds[type];
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = s.type;
+  osc.frequency.value = s.freq;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + s.duration);
+  osc.connect(gain);
+  gain.connect(masterGain);
+  osc.start();
+  osc.stop(audioCtx.currentTime + s.duration + 0.05);
+}
+```
+
+**`AudioContext` suspended state:** Chrome suspends `AudioContext` if created before a user gesture. `ensureAudio()` called on first click guarantees the context is created after a gesture. Alternatively, call `audioCtx.resume()` inside any click handler for safety.
+
+**Mute button HTML addition:**
+```html
+<button class="mute-btn" id="mute-btn" aria-label="Toggle sound" aria-pressed="false">🔊</button>
+```
+
+**Integration points:**
+- `index.html`: mute button (near scoreboard or title)
+- `src/style.css`: `.mute-btn` styling (small, unobtrusive)
+- `src/main.js`: `playSound()` calls at cell placement, computer move, and game over
+
+---
+
+### Feature 6: Dark Mode — `prefers-color-scheme`
+
+**Implementation:** CSS `@media (prefers-color-scheme: light)` override — pure CSS
+**New dependencies:** None
+
+`prefers-color-scheme` is "Baseline Widely available" since January 2020 (MDN). The current app already uses a dark theme (`#1a1a2e` navy, `#e94560` red). The dark theme becomes the *default* and light mode overrides it.
+
+**Approach:**
+- Keep existing CSS variables in `:root` as the dark defaults (no change to existing rules)
+- Add `@media (prefers-color-scheme: light)` block overriding CSS variables to light values
+- Light palette suggestion: white/near-white background, darker navy text, same red accent
+
+```css
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg:       #f5f5f5;   /* light grey background */
+    --surface:  #ffffff;   /* white cells */
+    --accent:   #c0392b;   /* slightly darker red for contrast on white */
+    --text:     #1a1a2e;   /* navy text — inverts from dark mode */
+    --text-dim: #555;
+  }
+}
+```
+
+**No JS required.** The CSS variable override cascades to all components that already use `var(--bg)`, `var(--surface)`, `var(--accent)`, `var(--text)`, `var(--text-dim)` — the entire existing UI adapts automatically.
+
+**Manual override (optional, future):** If a user toggle is later needed, a `data-theme="light"` attribute on `<html>` with matching CSS selector `[data-theme="light"]` can be added. Not required for this milestone.
+
+**Integration point:** `src/style.css` only — appended at bottom
+
+---
+
+## Dependency Summary
+
+### New npm Dependencies: NONE
+
+No additions to `package.json`. All six features are native browser platform.
+
+### New Rust/Cargo Dependencies: NONE
+
+No Rust code changes. All features live in the JS/CSS layer. The thinking delay is a JS `setTimeout`. Score persistence is JS `localStorage`. Sounds are JS Web Audio. Animations are CSS. Dark mode is CSS.
+
+### Existing Stack — Unchanged
+
+| Technology | Version | Status |
+|------------|---------|--------|
+| Rust (stable) | 1.94.1 | Unchanged |
+| wasm-bindgen | 0.2.118 | Unchanged |
+| wasm-pack | 0.14.0 | Unchanged |
+| Vite | 8.0.8 | Unchanged |
+| vite-plugin-wasm | 3.6.0 | Unchanged |
+| All Cargo dependencies | (see v1.0 STACK.md) | Unchanged |
+
+---
+
+## Browser API Compatibility
+
+| API / Feature | Chrome | Firefox | Safari | Edge | Baseline |
+|---------------|--------|---------|--------|------|----------|
+| CSS `@keyframes` animations | 43+ | 16+ | 9+ | 12+ | Widely available |
+| SVG `stroke-dashoffset` animation | All | All | All | All | Widely available |
+| `prefers-color-scheme` | 76+ | 67+ | 12.1+ | 79+ | Widely available (Jan 2020) |
+| `window.localStorage` | 4+ | 3.5+ | 4+ | 12+ | Widely available (Jul 2015) |
+| Web Audio API | 35+ | 25+ | 14.1+ | 12+ | Widely available (Apr 2021) |
+| `setTimeout` | All | All | All | All | Universal |
+
+All APIs are supported in every target browser (Chrome, Firefox, Safari, Edge modern).
+
+---
+
+## What NOT to Add
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| stdweb | Abandoned since 2020; superseded by web-sys/js-sys. No updates in 5+ years. | web-sys + js-sys |
-| wasm-bindgen `--target no-modules` | Legacy output format for `<script>` tags. No tree-shaking, no ES module support. | `--target web` (ES modules) |
-| Webpack for new projects | Slower builds, more complex config, larger ecosystem footprint for zero benefit on a small project. | Vite 8 |
-| Yew / Leptos / Dioxus | Full Rust UI frameworks — massive overkill for a tic-tac-toe grid. They add compile times, complexity, and a virtual DOM you don't need. | Vanilla JS + CSS |
-| `wasm-bindgen` `serde-serialize` feature | Deprecated legacy approach. Uses JSON internally — slower and larger output than serde-wasm-bindgen. | serde-wasm-bindgen crate |
-| TypeScript | Adds a compilation step for a trivial frontend. The JS side is ~100 lines of DOM manipulation and event handlers — TS overhead isn't justified. | Vanilla JS (ES modules) |
-| getrandom 0.2.x `js` feature | Older API. rand 0.10 depends on getrandom 0.4.x which uses the `wasm_js` feature name. Using 0.2.x will cause version conflicts. | getrandom 0.4.x with `wasm_js` feature |
+| Howler.js / Tone.js | External audio libs for 5 simple tones — massive overkill. Adds ~50–200KB bundle. | Web Audio API `OscillatorNode` — zero deps, zero bytes |
+| GSAP / Anime.js | JS animation libs for CSS `@keyframes` that take 5 lines — unjustified complexity. | CSS `@keyframes` + `animation` property |
+| Preloaded audio files (.mp3/.ogg) | Requires asset management, codec support matrix, loading logic, fallbacks. | Synthesized oscillator tones — plays instantly, no assets |
+| `prefers-color-scheme` JS listener | Real-time theme switching without page reload adds complexity for near-zero benefit. | Pure CSS `@media` — OS change reapplies automatically |
+| IndexedDB | Transactional async storage for 3 integers — extreme overkill. | `localStorage` — sync, simple, right-sized |
+| CSS custom property animation with `@property` | Houdini — not fully supported in Safari without flags. | Standard `@keyframes` — universally supported |
+| Motion library (Framer Motion) | React-only, 35KB+ for a vanilla JS page. | CSS `animation` property |
+| Web Animations API (WAAPI) | More JS complexity for what CSS keyframes handle in 10 lines. Useful if animations need JS-controlled playback; we don't. | CSS `@keyframes` |
 
-## Stack Patterns
+---
 
-**The Split Architecture (recommended for this project):**
-- Rust/WASM owns: board state, move validation, AI logic, win detection, score tracking
-- JavaScript owns: DOM rendering, CSS animations, event handling, WASM initialization
-- Bridge: exported `#[wasm_bindgen]` functions returning simple types or `JsValue` via serde-wasm-bindgen
+## Integration Map
 
-**Why this split:**
-- UI changes (animations, colors) don't require Rust recompilation
-- Rust side is pure logic — easy to unit test with `cargo test` (no WASM needed)
-- The JS rendering layer is trivial (~100 LOC) — no framework needed
-- Hot reload works for CSS/JS changes via Vite; only Rust changes need `wasm-pack build`
+```
+src/main.js changes:
+  handleCellClick()     → setTimeout for thinking delay
+                        → playSound('place') on human move
+                        → playSound('computer') after computer move
+  handleGameOver()      → playSound('win'|'loss'|'draw')
+                        → persistScore()
+                        → renderWinLine() [new helper]
+  resetGame()           → clearTimeout(thinkingTimer)
+                        → removeWinLine() [new helper]
+  main()                → loadScore() before updateScoreDisplay()
+                        → loadMuteState()
 
-**If the project were more complex:**
-- Use Yew/Leptos for the UI if it were a full SPA with routing, forms, etc.
-- Use `web-sys` DOM manipulation from Rust if you wanted zero-JS architecture
-- Use Trunk instead of Vite if the entire app lived in Rust
+index.html changes:
+  <svg class="win-line-overlay"> inside .board
+  <button id="mute-btn"> near scoreboard
 
-## Version Compatibility
+src/style.css changes:
+  @keyframes pop-in       (piece placement animation)
+  @keyframes draw-line    (win line animation)
+  .win-line-overlay       (SVG overlay positioning)
+  .mute-btn               (button style)
+  @media prefers-color-scheme: light  (dark mode override)
+  @media prefers-reduced-motion       (animation accessibility)
 
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| wasm-bindgen 0.2.118 | web-sys 0.3.95, js-sys 0.3.95 | These three share a version lockstep — web-sys/js-sys 0.3.x always depends on wasm-bindgen 0.2.x. Keep all three on latest minor. |
-| rand 0.10.x | getrandom 0.4.x | rand 0.10 requires `getrandom ^0.4.0`. You must use getrandom 0.4+ with `wasm_js` feature — not the older 0.2.x `js` feature. |
-| serde-wasm-bindgen 0.6.x | wasm-bindgen 0.2.x, serde 1.x | Stable bridge. No known compatibility issues. |
-| wasm-pack 0.14.0 | wasm-bindgen 0.2.x | wasm-pack downloads the matching `wasm-bindgen-cli` automatically. |
-| vite-plugin-wasm 3.6.0 | Vite 8.x | Compatible. Plugin uses standard Vite plugin API. |
-| Rust edition 2024 | Rust 1.85+ | The 2024 edition was stabilized in Rust 1.85. Our target Rust 1.94.1 fully supports it. |
+Rust/WASM (src/*.rs): NO CHANGES
+Cargo.toml:            NO CHANGES
+package.json:          NO CHANGES
+vite.config.js:        NO CHANGES
+```
+
+---
+
+## Critical Implementation Notes
+
+### Web Audio: `AudioContext` Lifecycle
+Create `AudioContext` lazily inside the first user-gesture handler (cell click). Do NOT create at module top level — Chrome and Safari will suspend it immediately and may not resume. Pattern:
+
+```js
+// WRONG: creates suspended context before any gesture
+const audioCtx = new AudioContext();
+
+// RIGHT: lazy creation on first gesture
+function ensureAudio() {
+  if (audioCtx) return;
+  audioCtx = new AudioContext();
+  // ...
+}
+boardEl.addEventListener('click', (e) => {
+  ensureAudio(); // safe — inside click handler
+  handleCellClick(e);
+});
+```
+
+### localStorage: Always `try/catch`
+`localStorage.setItem()` throws `QuotaExceededError` if storage is full, and `SecurityError` in `file://` URLs and private browsing in some configurations. Silent fallback to in-memory is the right behavior.
+
+### CSS Animations: Re-triggering on Re-render
+`renderBoard()` rebuilds all 9 cell DOM nodes via `boardEl.innerHTML = ''`. This means newly created cells with a CSS class automatically trigger their `animation` from scratch — no need to force-reflow tricks. The existing innerHTML rebuild pattern is actually ideal for animation triggering.
+
+### SVG Win Line: Board `position: relative`
+The `.board` already has `overflow: hidden` which establishes a containing block. The SVG overlay needs `position: absolute; inset: 0; pointer-events: none; width: 100%; height: 100%`. The `width/height: var(--board-size)` on `.board` means the SVG coordinate space matches board pixel dimensions.
+
+### Mute Toggle: Accessibility
+The `<button>` must have `aria-pressed` toggled between `"true"` and `"false"` on click. Use `aria-label="Toggle sound"` rather than emoji text for screen reader clarity.
+
+---
 
 ## Sources
 
-- crates.io API — wasm-bindgen 0.2.118, web-sys 0.3.95, js-sys 0.3.95, wasm-pack 0.14.0, serde 1.0.228, serde-wasm-bindgen 0.6.5, rand 0.10.1, getrandom 0.4.2, console_error_panic_hook 0.1.7, console_log 1.0.0, wasm-bindgen-test 0.3.68 (HIGH confidence — primary source)
-- npmjs.org API — Vite 8.0.8, vite-plugin-wasm 3.6.0, vite-plugin-top-level-await 1.6.0 (HIGH confidence — primary source)
-- forge.rust-lang.org — Rust stable 1.94.1 (HIGH confidence — official)
-- Context7: /drager/wasm-pack — project setup, build targets, Cargo.toml configuration (HIGH confidence)
-- Context7: /websites/rs_serde-wasm-bindgen — JsValue serialization patterns (HIGH confidence)
-- Context7: /menci/vite-plugin-wasm — Vite WASM integration, configuration (HIGH confidence)
-- Context7: /websites/rs_js-sys_0_3_91_js_sys — js-sys/wasm-bindgen relationship (HIGH confidence)
+- MDN Web Docs — Web Audio API (last modified Oct 2025, HIGH confidence — official)
+- MDN Web Docs — `prefers-color-scheme` (last modified Dec 2025, HIGH confidence — official)
+- MDN Web Docs — `window.localStorage` (last modified Nov 2025, HIGH confidence — official)
+- MDN Web Docs — Autoplay guide for media and Web Audio APIs (last modified Sep 2025, HIGH confidence — official)
+- MDN Web Docs — Using CSS animations (last modified Dec 2025, HIGH confidence — official)
+- Existing codebase: `src/main.js`, `src/style.css`, `index.html` (direct inspection, HIGH confidence)
 
 ---
-*Stack research for: Rust/WASM tic-tac-toe browser game*
-*Researched: 2026-04-12*
+
+*Stack research for: Tic-Tac-Toe WASM v1.1 Polish & Feel*
+*Researched: 2026-04-13*
