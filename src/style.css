@@ -1,0 +1,173 @@
+/* ─── Reset & base ─── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:        #1a1a2e;   /* dark navy background — per Decision A */
+  --surface:   #16213e;   /* slightly lighter navy for cells */
+  --accent:    #e94560;   /* red accent — per Decision A */
+  --text:      #e0e0e0;   /* light grey text */
+  --text-dim:  #888;
+  --cell-gap:  4px;
+  --board-size: min(90vw, 90vh, 440px);  /* fills viewport, max 440px — per Decision B */
+}
+
+/* ─── Full-viewport layout — no scrolling on any screen ─── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: clamp(8px, 2vh, 20px);  /* proportional spacing that shrinks on small screens */
+  padding: 16px;
+}
+
+/* ─── Title ─── */
+.title {
+  font-size: clamp(1.2rem, 4vw, 2rem);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* ─── Score board (SCORE-01) ─── */
+.scoreboard {
+  display: flex;
+  gap: 24px;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 10px 24px;
+}
+
+.score-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 48px;
+}
+
+.score-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+}
+
+.score-value {
+  font-size: clamp(1.4rem, 4vw, 2rem);
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+
+.score-item--loss .score-value  { color: var(--accent); }
+.score-item--draw .score-value  { color: var(--text-dim); }
+
+/* ─── Status / turn indicator (UI-02, UI-03) ─── */
+.status-message {
+  font-size: clamp(0.85rem, 2.5vw, 1.1rem);
+  color: var(--text-dim);
+  min-height: 1.4em;  /* reserves space — prevents layout shift on text change */
+  text-align: center;
+}
+
+.status-message.status--win    { color: var(--accent); font-weight: 700; }
+.status-message.status--loss   { color: var(--accent); }
+.status-message.status--draw   { color: var(--text); }
+.status-message.status--computer-turn { color: var(--text-dim); font-style: italic; }
+
+/* ─── Board (UI-01, UI-05) — responsive CSS Grid ─── */
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--cell-gap);
+  width: var(--board-size);
+  height: var(--board-size);
+  /* subtle accent border */
+  border: 2px solid var(--accent);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--accent);  /* gap color = accent red */
+}
+
+/* ─── Individual cells ─── */
+.cell {
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: min(15vw, 15vh, 80px);  /* X/O glyph scales with board */
+  font-weight: 900;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+  transition: background 0.1s ease;
+  -webkit-tap-highlight-color: transparent;  /* remove iOS tap flash */
+}
+
+.cell:hover:not(.cell--taken):not(.cell--disabled) {
+  background: #1e2a4a;  /* subtle hover on empty cells */
+}
+
+.cell--taken {
+  cursor: default;
+}
+
+.cell--x {
+  color: var(--text);   /* X in white */
+}
+
+.cell--o {
+  color: var(--accent); /* O in red — distinguishes players */
+}
+
+/* ─── Win highlight (Decision D) ─── */
+.cell--winning {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* ─── Disabled state during computer turn ─── */
+.board.board--disabled .cell:not(.cell--taken) {
+  cursor: not-allowed;
+}
+
+/* ─── Restart button (UI-04) ─── */
+.restart-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 32px;
+  font-size: clamp(0.85rem, 2vw, 1rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.restart-btn:hover {
+  opacity: 0.85;
+}
+
+.restart-btn:active {
+  opacity: 0.7;
+}
+
+/* ─── Utility: visually hidden (keep for accessibility) ─── */
+[hidden] { display: none !important; }
