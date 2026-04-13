@@ -94,6 +94,7 @@ html, body {
 .board {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
   gap: var(--cell-gap);
   width: var(--board-size);
   height: var(--board-size);
