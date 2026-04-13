@@ -87,36 +87,47 @@ function renderBoard(winningPositions = []) {
   // Build a Set for O(1) winning-cell lookup
   const winSet = new Set(winningPositions);
 
-  boardEl.innerHTML = '';
-
-  for (let i = 0; i < 9; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'cell';
-    cell.dataset.index = String(i);
-    cell.setAttribute('role', 'gridcell');
-
-    const value = board[i];
-
-    if (value === PLAYER_X) {
-      cell.textContent = 'X';
-      cell.classList.add('cell--taken', 'cell--x');
-      cell.setAttribute('aria-label', `X at position ${i + 1}`);
-    } else if (value === PLAYER_O) {
-      cell.textContent = 'O';
-      cell.classList.add('cell--taken', 'cell--o');
-      cell.setAttribute('aria-label', `O at position ${i + 1}`);
-    } else {
-      cell.setAttribute('aria-label', `Empty cell ${i + 1}`);
-      // Keyboard accessibility (LW-01): empty cells can receive focus and be activated
+  // First render or after reset: build all 9 cells from scratch
+  if (boardEl.children.length !== 9) {
+    boardEl.innerHTML = '';
+    for (let i = 0; i < 9; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.index = String(i);
+      cell.setAttribute('role', 'gridcell');
       cell.tabIndex = 0;
       cell.setAttribute('role', 'button');
+      cell.setAttribute('aria-label', `Empty cell ${i + 1}`);
+      boardEl.appendChild(cell);
+    }
+  }
+
+  // Incremental update: only patch cells whose state has changed
+  // Existing X/O cells are left untouched — CSS animation does NOT re-fire (ANIM-01)
+  const cells = boardEl.children;
+  for (let i = 0; i < 9; i++) {
+    const cell = cells[i];
+    const value = board[i];
+    const wasEmpty = !cell.classList.contains('cell--taken');
+
+    if (value === PLAYER_X && wasEmpty) {
+      cell.textContent = 'X';
+      cell.classList.add('cell--taken', 'cell--x');
+      cell.removeAttribute('tabindex');
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `X at position ${i + 1}`);
+    } else if (value === PLAYER_O && wasEmpty) {
+      cell.textContent = 'O';
+      cell.classList.add('cell--taken', 'cell--o');
+      cell.removeAttribute('tabindex');
+      cell.setAttribute('role', 'gridcell');
+      cell.setAttribute('aria-label', `O at position ${i + 1}`);
     }
 
-    if (winSet.has(i)) {
+    // Win highlight — applied once at game-over; idempotent (ANIM-01)
+    if (winSet.has(i) && !cell.classList.contains('cell--winning')) {
       cell.classList.add('cell--winning');
     }
-
-    boardEl.appendChild(cell);
   }
 }
 
@@ -239,6 +250,7 @@ function resetGame() {
   boardEl.classList.remove('board--disabled');
   restartBtn.hidden = true;
   clearWinLine();
+  boardEl.innerHTML = '';   // forces full cell rebuild on next renderBoard() call
   renderBoard();
   setStatus('Your turn');
 }
