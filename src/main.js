@@ -144,6 +144,7 @@ function handleCellClick(event) {
     // Should not happen (we already checked status === 'playing'), but be safe
     isProcessing = false;
     boardEl.classList.remove('board--disabled');
+    setStatus('Your turn');  // restore correct status — prevents stale "Computer's turn" message
     return;
   }
 
