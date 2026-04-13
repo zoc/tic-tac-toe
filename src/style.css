@@ -147,6 +147,10 @@ html, body {
 }
 
 /* ─── Disabled state during computer turn ─── */
+.board.board--disabled {
+  pointer-events: none;  /* block all pointer events — prevents hover highlight on empty cells */
+}
+
 .board.board--disabled .cell:not(.cell--taken) {
   cursor: not-allowed;
 }
