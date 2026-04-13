@@ -66,7 +66,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 06-01-PLAN.md — Fix FEEL-02 timer cancellation + human verification of delay behaviour
+- [x] 06-01-PLAN.md — Fix FEEL-02 timer cancellation + human verification of delay behaviour
 
 ### Phase 7: Sound Effects & Mute
 **Goal**: The game has synthesized audio feedback for all game events, with a persistent mute option
