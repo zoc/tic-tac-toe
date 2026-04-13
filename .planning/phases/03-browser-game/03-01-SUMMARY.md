@@ -53,12 +53,12 @@ decisions:
     description: "Removed vite-plugin-top-level-await (incompatible with Vite 8); used build.target=esnext instead"
 
 metrics:
-  duration: "~8 minutes"
+  duration: "~20 minutes"
   completed: "2026-04-13"
-  tasks-completed: 4
+  tasks-completed: 5
   tasks-total: 5
   files-created: 5
-  files-modified: 2
+  files-modified: 3
 ---
 
 # Phase 03 Plan 01: Browser Game Frontend Summary
@@ -73,7 +73,10 @@ metrics:
 | 2 | Write index.html | 3d711bb | index.html |
 | 3 | Write src/style.css | 84ddfb7 | src/style.css |
 | 4 | Write src/main.js | a99166b | src/main.js |
-| 5 | Human verify checkpoint | — | Awaiting |
+| 5 | Human verify checkpoint | ✓ Approved | — |
+| fix | vite-plugin-top-level-await → build.target=esnext | bae18e5 | vite.config.js, package.json |
+| fix | Prevent cell size shift when X/O appears | a0554cf | src/style.css |
+| fix | Force equal row heights with grid-template-rows | c34a0d3 | src/style.css |
 
 ## What Was Built
 
@@ -123,17 +126,35 @@ index.html
 - **Files modified:** `.gitignore`
 - **Commit:** `bfb0f3c`
 
+**3. [Rule 1 - Bug] Cell size shifts when X/O text appears**
+
+- **Found during:** Task 5 human verification
+- **Issue:** Cells resized when X or O text was rendered — font-size scaled with cell dimensions causing layout shift on move.
+- **Fix:** Added `line-height: 1` and explicit `width`/`height: 100%` to `.cell` to prevent text from affecting cell dimensions.
+- **Files modified:** `src/style.css`
+- **Commit:** `a0554cf`
+
+**4. [Rule 1 - Bug] Unequal row heights in board grid**
+
+- **Found during:** Task 5 human verification (follow-on to fix 3)
+- **Issue:** CSS Grid rows were not enforced to equal height, causing the board to appear non-square in some viewports.
+- **Fix:** Added `grid-template-rows: repeat(3, 1fr)` to `.board` to mirror the existing `grid-template-columns`.
+- **Files modified:** `src/style.css`
+- **Commit:** `c34a0d3`
+
 ## Checkpoint Status
 
-**Task 5 (Human Verify)** requires manual browser verification. The dev server is ready to start:
+**Task 5 (Human Verify):** ✓ APPROVED — all criteria passed.
 
-```bash
-cd /Users/franck/Development/tic-tac-toe
-npm run dev
-# Open http://localhost:5173
-```
-
-See Task 5 checkpoint details in `03-01-PLAN.md` for full verification checklist.
+Human verified on 2026-04-13. All 9 success criteria confirmed:
+- Dark navy board with red grid lines renders correctly
+- X appears immediately on click; computer responds with O
+- Win: winning cells highlighted red, "You win! 🎉" displayed
+- "New Game" button resets board; score persists in session
+- Computer win: O cells highlighted, "Computer wins!" displayed
+- Draw: "It's a draw!" displayed with score increment
+- Responsive: board fills viewport on mobile without scrolling
+- Zero console errors during gameplay
 
 ## Known Stubs
 
@@ -161,6 +182,10 @@ Commits verified:
 - ✓ FOUND: a99166b (feat: add src/main.js)
 - ✓ FOUND: bae18e5 (fix: vite-plugin-top-level-await)
 - ✓ FOUND: bfb0f3c (chore: .gitignore)
+- ✓ FOUND: a0554cf (fix: cell size shift)
+- ✓ FOUND: c34a0d3 (fix: equal row heights)
 
 Build verified:
 - ✓ `npm run build` succeeds — dist/index.html + dist/assets/*.js + dist/assets/*.wasm generated
+
+Human verification: ✓ APPROVED 2026-04-13

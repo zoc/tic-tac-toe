@@ -12,9 +12,9 @@ Build a browser-based tic-tac-toe game bottom-up: first implement complete game 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Rust Game Engine** - Board logic, win/draw detection, move validation, and beatable AI — all in pure Rust with native tests
-- [ ] **Phase 2: WASM Bridge** - Compile game engine to WebAssembly via wasm-pack with a clean scalar-based JS interop surface
-- [ ] **Phase 3: Browser Game** - Fully playable tic-tac-toe in the browser with grid rendering, turn flow, outcome display, scoring, and responsive layout
+- [x] **Phase 1: Rust Game Engine** - Board logic, win/draw detection, move validation, and beatable AI — all in pure Rust with native tests
+- [x] **Phase 2: WASM Bridge** - Compile game engine to WebAssembly via wasm-pack with a clean scalar-based JS interop surface
+- [x] **Phase 3: Browser Game** - Fully playable tic-tac-toe in the browser with grid rendering, turn flow, outcome display, scoring, and responsive layout
 
 ## Phase Details
 
@@ -55,7 +55,7 @@ Plans:
   5. The game is playable on both phone and desktop screens — grid and controls adapt to viewport size
 **Plans:** 1 plan
 Plans:
-- [ ] 03-01-PLAN.md — Vite scaffold, HTML/CSS/JS game frontend wired to WASM engine (all UI requirements)
+- [x] 03-01-PLAN.md — Vite scaffold, HTML/CSS/JS game frontend wired to WASM engine (all UI requirements)
 **UI hint**: yes
 
 ## Progress
@@ -67,4 +67,4 @@ Phases execute in numeric order: 1 → 2 → 3
 |-------|----------------|--------|-----------|
 | 1. Rust Game Engine | 1/1 | Complete | 2026-04-12 |
 | 2. WASM Bridge | 1/1 | Complete | 2026-04-12 |
-| 3. Browser Game | 0/1 | Planned | - |
+| 3. Browser Game | 1/1 | Complete | 2026-04-13 |
