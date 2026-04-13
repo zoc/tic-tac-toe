@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Polish & Feel
-status: defining_requirements
-stopped_at: Milestone v1.1 started — defining requirements
+status: phase_ready
+stopped_at: Roadmap created — Phase 4 ready, not started
 last_updated: "2026-04-13T00:00:00.000Z"
 last_activity: 2026-04-13
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,16 +21,26 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-13)
 
 **Core value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser
-**Current focus:** Defining requirements
+**Current focus:** Phase 4 — CSS Foundation & Persistence
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-13 — Milestone v1.1 started
+Phase: 4 — CSS Foundation & Persistence
+Plan: Not started
+Status: Phase ready — awaiting `/gsd-plan-phase 4`
+Last activity: 2026-04-13 — Roadmap created for v1.1 Polish & Feel
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [░░░░░░░░░░] 0% (0/5 phases complete)
+
+## Phase Queue
+
+| Phase | Name | Status |
+|-------|------|--------|
+| **4** | **CSS Foundation & Persistence** | **← Next** |
+| 5 | CSS Piece Animations | Pending |
+| 6 | Thinking Delay | Pending |
+| 7 | Sound Effects & Mute | Pending |
+| 8 | Animated Win Line | Pending |
 
 ## Accumulated Context
 
@@ -44,9 +54,9 @@ None.
 
 ### Blockers/Concerns
 
-None — clean slate for v1.1.
+None — all 16 v1.1 requirements mapped, roadmap complete.
 
 ## Session Continuity
 
 Last session: 2026-04-13T00:00:00.000Z
-Stopped at: Milestone v1.1 started — requirements and roadmap pending
+Stopped at: Roadmap created — run `/gsd-plan-phase 4` to begin

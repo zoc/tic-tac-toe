@@ -58,22 +58,22 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| THEM-01 | Phase 4 | Pending |
-| THEM-02 | Phase 4 | Pending |
-| PERS-01 | Phase 4 | Pending |
-| PERS-02 | Phase 4 | Pending |
-| ANIM-01 | Phase 5 | Pending |
-| ANIM-03 | Phase 5 | Pending |
-| FEEL-01 | Phase 6 | Pending |
-| FEEL-02 | Phase 6 | Pending |
-| AUDI-01 | Phase 7 | Pending |
-| AUDI-02 | Phase 7 | Pending |
-| AUDI-03 | Phase 7 | Pending |
-| AUDI-04 | Phase 7 | Pending |
-| AUDI-05 | Phase 7 | Pending |
-| AUDI-06 | Phase 7 | Pending |
-| AUDI-07 | Phase 7 | Pending |
-| ANIM-02 | Phase 8 | Pending |
+| THEM-01 | Phase 4 — CSS Foundation & Persistence | Pending |
+| THEM-02 | Phase 4 — CSS Foundation & Persistence | Pending |
+| PERS-01 | Phase 4 — CSS Foundation & Persistence | Pending |
+| PERS-02 | Phase 4 — CSS Foundation & Persistence | Pending |
+| ANIM-01 | Phase 5 — CSS Piece Animations | Pending |
+| ANIM-03 | Phase 5 — CSS Piece Animations | Pending |
+| FEEL-01 | Phase 6 — Thinking Delay | Pending |
+| FEEL-02 | Phase 6 — Thinking Delay | Pending |
+| AUDI-01 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-02 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-03 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-04 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-05 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-06 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-07 | Phase 7 — Sound Effects & Mute | Pending |
+| ANIM-02 | Phase 8 — Animated Win Line | Pending |
 
 **Coverage:**
 - v1.1 requirements: 16 total
@@ -82,4 +82,4 @@
 
 ---
 *Requirements defined: 2026-04-13*
-*Last updated: 2026-04-13 after initial v1.1 definition*
+*Last updated: 2026-04-13 — traceability finalized after roadmap creation*
