@@ -21,7 +21,7 @@
 - [x] **Phase 4: CSS Foundation & Persistence** — Dark mode + persistent scores (lowest risk) (completed 2026-04-13)
 - [ ] **Phase 5: CSS Piece Animations** — Pop-in animation on X/O placement
 - [ ] **Phase 6: Thinking Delay** — Computer pause before moving (async refactor)
-- [ ] **Phase 7: Sound Effects & Mute** — Web Audio synthesized tones + mute toggle
+- [x] **Phase 7: Sound Effects & Mute** — Web Audio synthesized tones + mute toggle (completed 2026-04-13)
 - [ ] **Phase 8: Animated Win Line** — Line draws through winning cells
 
 ## Phase Details
@@ -81,7 +81,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 07-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented sound effects and mute toggle
+- [x] 07-01-PLAN.md — Automated spot-checks + manual browser verification of pre-implemented sound effects and mute toggle
 
 ### Phase 8: Animated Win Line
 **Goal**: Winning feels theatrical — a line draws itself through the three winning cells
@@ -105,5 +105,5 @@ Plans:
 | 4. CSS Foundation & Persistence | v1.1 | 1/1 | Complete   | 2026-04-13 |
 | 5. CSS Piece Animations | v1.1 | 0/1 | Not started | - |
 | 6. Thinking Delay | v1.1 | 0/? | Not started | - |
-| 7. Sound Effects & Mute | v1.1 | 0/? | Not started | - |
+| 7. Sound Effects & Mute | v1.1 | 1/1 | Complete   | 2026-04-13 |
 | 8. Animated Win Line | v1.1 | 0/? | Not started | - |

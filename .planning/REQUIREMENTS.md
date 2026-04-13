@@ -24,13 +24,13 @@
 
 ### Audio
 
-- [ ] **AUDI-01**: User hears a distinct sound when placing their move
-- [ ] **AUDI-02**: User hears a distinct sound when the computer places its move
-- [ ] **AUDI-03**: User hears a win fanfare when they win
-- [ ] **AUDI-04**: User hears a loss sound when they lose
-- [ ] **AUDI-05**: User hears a draw sound when the game ends in a draw
-- [ ] **AUDI-06**: User can toggle sound on/off with a mute button
-- [ ] **AUDI-07**: Mute preference persists across page refresh
+- [x] **AUDI-01**: User hears a distinct sound when placing their move
+- [x] **AUDI-02**: User hears a distinct sound when the computer places its move
+- [x] **AUDI-03**: User hears a win fanfare when they win
+- [x] **AUDI-04**: User hears a loss sound when they lose
+- [x] **AUDI-05**: User hears a draw sound when the game ends in a draw
+- [x] **AUDI-06**: User can toggle sound on/off with a mute button
+- [x] **AUDI-07**: Mute preference persists across page refresh
 
 ### Theming
 
@@ -66,13 +66,13 @@
 | ANIM-03 | Phase 5 — CSS Piece Animations | Pending |
 | FEEL-01 | Phase 6 — Thinking Delay | Pending |
 | FEEL-02 | Phase 6 — Thinking Delay | Pending |
-| AUDI-01 | Phase 7 — Sound Effects & Mute | Pending |
-| AUDI-02 | Phase 7 — Sound Effects & Mute | Pending |
-| AUDI-03 | Phase 7 — Sound Effects & Mute | Pending |
-| AUDI-04 | Phase 7 — Sound Effects & Mute | Pending |
-| AUDI-05 | Phase 7 — Sound Effects & Mute | Pending |
-| AUDI-06 | Phase 7 — Sound Effects & Mute | Pending |
-| AUDI-07 | Phase 7 — Sound Effects & Mute | Pending |
+| AUDI-01 | Phase 7 — Sound Effects & Mute | Complete |
+| AUDI-02 | Phase 7 — Sound Effects & Mute | Complete |
+| AUDI-03 | Phase 7 — Sound Effects & Mute | Complete |
+| AUDI-04 | Phase 7 — Sound Effects & Mute | Complete |
+| AUDI-05 | Phase 7 — Sound Effects & Mute | Complete |
+| AUDI-06 | Phase 7 — Sound Effects & Mute | Complete |
+| AUDI-07 | Phase 7 — Sound Effects & Mute | Complete |
 | ANIM-02 | Phase 8 — Animated Win Line | Pending |
 
 **Coverage:**
