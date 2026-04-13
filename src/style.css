@@ -117,6 +117,10 @@ html, body {
   color: var(--text);
   transition: background 0.1s ease;
   -webkit-tap-highlight-color: transparent;  /* remove iOS tap flash */
+  overflow: hidden;       /* prevent text from expanding cell dimensions */
+  min-width: 0;           /* allow grid cell to shrink below content size */
+  min-height: 0;          /* same for height axis */
+  line-height: 1;         /* prevent line-height from adding extra vertical space */
 }
 
 .cell:hover:not(.cell--taken):not(.cell--disabled) {
