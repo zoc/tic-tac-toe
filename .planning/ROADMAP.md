@@ -37,14 +37,14 @@ See archive: `.planning/milestones/v1.1-ROADMAP.md`
 ## v1.2 Docker Deployment (Phases 9–10)
 
 - [x] **Phase 9: Docker Image & nginx** — Build and locally verify a multi-stage Docker image serving the game
-- [ ] **Phase 10: Documentation** — Write README usage docs after image is verified working
+- [x] **Phase 10: Documentation** — Write README usage docs after image is verified working (completed 2026-04-14)
 
 ## Phase Overview
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|-----------------|
 | 9 | Docker Image & nginx | Developer can build, run, and verify a correct Docker image locally | DOCK-01, DOCK-02, DOCK-03, DOCK-04, DOCK-05, DOCK-06, DOCK-07, DOCK-08 | 5 |
-| 10 | Documentation | Developer can find and follow a README to run or deploy the container | DOCS-01, DOCS-02 | 2 |
+| 10 | Documentation | 1/1 | Complete    | 2026-04-14 |
 
 ## Phase Details
 
@@ -69,10 +69,10 @@ Plans:
 **Success criteria:**
 1. README contains a copy-pasteable `docker build` + `docker run -p 8080:80` one-liner that works without prior context
 2. README includes a note on deploying behind a reverse proxy (Caddy or nginx upstream) on a VPS
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 10-01-PLAN.md — Add Quick Start section and reverse proxy note to README.md
+- [x] 10-01-PLAN.md — Add Quick Start section and reverse proxy note to README.md
 
 ## Progress
 

@@ -20,8 +20,8 @@ Requirements for the Docker Deployment milestone.
 
 ### Documentation
 
-- [ ] **DOCS-01**: README includes `docker build` and `docker run` one-liner
-- [ ] **DOCS-02**: README includes notes on deploying behind a reverse proxy on a VPS
+- [x] **DOCS-01**: README includes `docker build` and `docker run` one-liner
+- [x] **DOCS-02**: README includes notes on deploying behind a reverse proxy on a VPS
 
 ## Future Requirements
 
@@ -58,8 +58,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOCK-06 | Phase 9 | ✅ Complete |
 | DOCK-07 | Phase 9 | ✅ Complete |
 | DOCK-08 | Phase 9 | ✅ Complete |
-| DOCS-01 | Phase 10 | Pending |
-| DOCS-02 | Phase 10 | Pending |
+| DOCS-01 | Phase 10 | Complete |
+| DOCS-02 | Phase 10 | Complete |
 
 **Coverage:**
 - v1.2 requirements: 10 total
