@@ -50,22 +50,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DOCK-01 | — | Pending |
-| DOCK-02 | — | Pending |
-| DOCK-03 | — | Pending |
-| DOCK-04 | — | Pending |
-| DOCK-05 | — | Pending |
-| DOCK-06 | — | Pending |
-| DOCK-07 | — | Pending |
-| DOCK-08 | — | Pending |
-| DOCS-01 | — | Pending |
-| DOCS-02 | — | Pending |
+| DOCK-01 | Phase 9 | Pending |
+| DOCK-02 | Phase 9 | Pending |
+| DOCK-03 | Phase 9 | Pending |
+| DOCK-04 | Phase 9 | Pending |
+| DOCK-05 | Phase 9 | Pending |
+| DOCK-06 | Phase 9 | Pending |
+| DOCK-07 | Phase 9 | Pending |
+| DOCK-08 | Phase 9 | Pending |
+| DOCS-01 | Phase 10 | Pending |
+| DOCS-02 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10 ⚠️
+- Mapped to phases: 10 ✓
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 — initial definition*
+*Last updated: 2026-04-14 — traceability filled in after roadmap creation*
