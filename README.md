@@ -2,6 +2,15 @@
 
 A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished frontend featuring smooth CSS animations, synthesized sound effects, system dark mode, score persistence, and an animated win line. The computer is beatable — it plays well but makes occasional mistakes.
 
+## Quick Start
+
+```bash
+docker build -t tic-tac-toe .
+docker run --rm -p 8080:80 tic-tac-toe
+```
+
+Then open http://localhost:8080 in your browser.
+
 ## Play
 
 Open `index.html` after building, or run a container:
