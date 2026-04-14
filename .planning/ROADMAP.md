@@ -57,7 +57,11 @@ See archive: `.planning/milestones/v1.1-ROADMAP.md`
 3. `curl -I http://localhost:8080/assets/*.wasm` returns `Content-Type: application/wasm` (not `octet-stream`)
 4. Response headers show `Cache-Control: public, max-age=31536000, immutable` for `/assets/*` and `Cache-Control: no-cache` for `index.html`
 5. `docker inspect tic-tac-toe:test` shows a HEALTHCHECK configured and port 80 exposed; build context excludes `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/`
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Fix Dockerfile (wasm-pack pin, Node 20, HEALTHCHECK) and nginx.conf (gzip, Cache-Control no-cache, /healthz)
+- [ ] 09-02-PLAN.md — Build image, run all 5 ROADMAP success criteria verifications, human verify gameplay
 
 ### Phase 10: Documentation
 **Goal:** Developer can find a clear README section explaining how to run the container locally and deploy it behind a reverse proxy on a VPS.
