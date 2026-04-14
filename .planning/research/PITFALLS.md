@@ -1,645 +1,673 @@
-# Domain Pitfalls — v1.1 Polish & Feel
+# Domain Pitfalls — v1.2 Docker Multi-Arch Deployment
 
-**Domain:** Browser game polish (CSS animations, Web Audio, localStorage, dark mode)
-**Codebase:** Rust/WASM + Vite 8 + vanilla JS/CSS — existing game, adding features
-**Researched:** 2026-04-13
-**Confidence:** HIGH — MDN official docs + deep codebase analysis
+**Domain:** Docker multi-architecture deployment — Rust/WASM + Vite static site containerization
+**Codebase:** Existing Rust/wasm-pack + Vite 8 + vanilla JS/CSS game, adding Docker packaging
+**Researched:** 2026-04-14
+**Confidence:** HIGH — Docker official docs + GitHub Actions official docs + MDN (WASM MIME) + direct codebase inspection
 
 ---
 
 ## Context: Why This Document Exists
 
-The v1.0 PITFALLS.md covers Rust/WASM boundary issues (async init, panic hooks, crate-type).
-This document covers the six **browser-side** features being added in v1.1:
+v1.1 PITFALLS covers browser-side polish (Web Audio, CSS animations, localStorage, dark mode).
+This document covers the **Docker deployment** pitfalls specific to packaging a Rust/WASM + Vite
+static site as a multi-architecture container image.
 
-1. Smooth CSS animations for piece placement and board transitions
-2. Animated win line through winning cells
-3. Computer "thinking" delay (300–800ms)
-4. Persistent scores via localStorage
-5. Sound effects with mute toggle (Web Audio API)
-6. Dark mode via `prefers-color-scheme`
-
-Each pitfall is mapped to the specific feature and includes the fix for **this** codebase.
+This is not a generic Docker guide. Every pitfall here is specific to one or more of:
+- Rust + Node.js **dual ecosystem** in the same Dockerfile
+- `wasm-pack` compilation behavior inside Docker (especially under QEMU/arm64 emulation)
+- Vite's WASM output bundle and how nginx must serve it
+- Multi-arch buildx setup in GitHub Actions with tag-on-push workflows
+- Docker Hub credential handling and `.dockerignore` for a Rust+Node project
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that require rewriting significant code or cause obvious broken behavior.
+Mistakes that produce broken images, failed builds, or silent serving errors.
 
 ---
 
-### Pitfall 1: Animation Classes Applied to innerHTML-Wiped Elements
-
-**Feature:** CSS animations for piece placement
+### Pitfall 1: QEMU Emulation Makes `wasm-pack build` Catastrophically Slow (or Hang)
 
 **What goes wrong:**
-The current `renderBoard()` calls `boardEl.innerHTML = ''` then recreates all 9 cells from scratch. When a new piece is placed, the intent is to animate only the *new* cell. But if you apply an animation class before calling `renderBoard()`, the element is destroyed. If you apply it after, you're animating a brand-new DOM node that hasn't been painted yet — which can cause the animation to skip the first frame on some browsers.
+Building `linux/arm64` via QEMU emulation on a `linux/amd64` GitHub Actions runner compiles
+Rust under full software CPU emulation. `wasm-pack build` involves:
+1. `cargo` dependency resolution and compilation (many crates)
+2. `wasm-bindgen-cli` code generation
+3. `wasm-opt` binary optimizer pass (runs native arm64 binary under QEMU)
 
-More subtly: if `renderBoard()` is called after human move AND after computer move, every cell (including previously placed ones) gets a freshly created DOM node. An `animation: pop-in 0.2s` on `.cell--taken` would fire on ALL placed pieces every time any move is made — so move 5 animates cells 1, 2, 3, 4, and 5 simultaneously.
+For non-trivial Rust projects, the QEMU-emulated Rust compile is **10–30× slower** than native.
+The wasm-opt pass in particular can stall for 5+ minutes on a 33KB `.wasm` binary under emulation.
+GitHub Actions jobs time out after 6 hours by default, but some teams set shorter limits.
 
 **Why it happens:**
-The innerHTML-clear approach was the right call for v1.0 (simplicity, stateless rendering). But CSS animations are stateful — they fire when a class is added to an element that didn't have it. Recreating all elements from scratch defeats this.
+QEMU is software CPU emulation — every x86 instruction executed for arm64 is individually translated.
+Rust compilation is CPU-intensive. Docker docs explicitly warn: *"Emulation with QEMU can be much
+slower than native builds, especially for compute-heavy tasks like compilation."*
 
-**Consequences:**
-- All pieces animate on every render — jarring instead of polished
-- The last-placed piece is indistinguishable from re-rendered old pieces
-- Potential flicker during animation on Safari (paint timing issue)
+**How to avoid:**
+Use the `--platform=$BUILDPLATFORM` trick to run the Rust **build stage** on the native runner
+architecture (`linux/amd64`), cross-compiling only the **output** to `wasm32-unknown-unknown`:
 
-**Prevention:**
-Two valid strategies:
+```dockerfile
+# Build stage always runs on the runner's native platform
+FROM --platform=$BUILDPLATFORM rust:slim AS build
 
-*Strategy A — Incremental DOM update (recommended):*
-Track which cells were already rendered. On `renderBoard()`, update existing cells instead of wiping and recreating. Only add `.cell--animate-in` on the newly placed cell:
-```js
-// Instead of innerHTML = '', update existing cells in-place
-const cells = boardEl.querySelectorAll('.cell');
-// Update only changed cells; add animation class only to newly filled ones
+# wasm32 target is platform-independent — the WASM binary is the same on amd64 and arm64
+RUN rustup target add wasm32-unknown-unknown
+RUN cargo install wasm-pack
+COPY . .
+RUN wasm-pack build --target web --release
+
+RUN npm ci
+RUN npm run build
+# dist/ now contains the .wasm and all assets
+
+# Serve stage runs on the target platform (nginx:alpine is multi-arch)
+FROM --platform=$TARGETPLATFORM nginx:alpine AS serve
+COPY --from=build /app/dist /usr/share/nginx/html
 ```
 
-*Strategy B — Animation class with immediate removal:*
-After `renderBoard()` clears and recreates, compare the WASM board state before/after to find the new position, then add the animation class only to that one cell. Force-restart the animation by voiding the offset:
-```js
-cell.classList.remove('cell--animate-in');
-void cell.offsetWidth; // forces reflow, resets animation
-cell.classList.add('cell--animate-in');
-```
+**Key insight:** WebAssembly is platform-neutral bytecode. A `.wasm` file compiled on `linux/amd64`
+is **identical** to one compiled on `linux/arm64`. The `wasm32-unknown-unknown` target doesn't
+know or care about the host architecture. There is zero reason to compile Rust under QEMU for the
+arm64 image — the build stage output is the same either way.
 
-Strategy A is cleaner for win-line animation too. Strategy B works but requires careful bookkeeping of "what was the board before this move."
+The nginx **serve stage** is multi-arch because `nginx:alpine` has native arm64 and amd64 layers.
+`COPY --from=build` carries the identical static files into the correct arch-specific nginx layer.
 
-**Detection:** Play the game and open DevTools Animation panel — look for multiple animations firing simultaneously when they should be one.
+**Warning signs:**
+- Build for `linux/arm64` takes >5 minutes while `linux/amd64` takes <1 minute
+- Build logs show `[linux/arm64 build...]` running full cargo compilation
+- `wasm-opt` step appears twice in build logs (once per platform)
 
-**Phase:** Animations phase — must decide which strategy before writing any animation CSS.
+**Phase to address:** Dockerfile creation phase — use `--platform=$BUILDPLATFORM` on the build
+stage from the first line of the Dockerfile. Never patch this in after a slow build.
 
 ---
 
-### Pitfall 2: Win Line Animation Requires Absolute Positioning Over the Board
-
-**Feature:** Animated win line through three winning cells
+### Pitfall 2: Missing `application/wasm` MIME Type Causes Browser Rejection of `.wasm` Files
 
 **What goes wrong:**
-Developers try to animate a win line using `border` on individual cells, `background` gradients, or SVG `line` inside each cell. None of these produce a clean straight line through the center of three cells that feels like a real strikethrough.
+When nginx serves `tic_tac_toe_bg-BSmjV6BP.wasm`, it must send the response header:
+```
+Content-Type: application/wasm
+```
 
-The natural implementation is an overlay `<div>` or `<svg>` element positioned absolutely over the board, with a `clip-path` or `stroke-dasharray` animation drawing the line from one end to the other. But the board uses `overflow: hidden` (to clip the cell corners), which clips absolutely positioned children too — the overlay is hidden.
+If it sends `application/octet-stream` (the default fallback for unknown extensions), the browser
+will **reject** the WASM module with a console error like:
+```
+WebAssembly.compileStreaming(): Response has unsupported MIME type 'application/octet-stream'
+expected 'application/wasm'
+```
+
+This means the compiled game engine fails to load silently in production. The JS error handler
+(`main().catch(...)`) will catch it, but the user sees a broken page.
 
 **Why it happens:**
-`overflow: hidden` on `.board` clips all descendant elements, including absolutely positioned ones. This is well-documented but easy to forget.
+`nginx:alpine`'s default `mime.types` file **does include** `application/wasm wasm;` in recent
+versions (nginx ≥ 1.11.4, 2017+). However:
+1. The default `mime.types` is only loaded if your `nginx.conf` includes `include mime.types;`
+2. If you write a custom `nginx.conf` that omits the `include` directive, WASM gets no MIME type
+3. The `default_type application/octet-stream;` fallback kicks in silently
 
-**Consequences:**
-- Win line overlay is completely invisible — silent failure
-- Developers waste time debugging animation-related CSS instead of the real culprit
-
-**Prevention:**
-Two options:
-
-*Option A — Remove `overflow: hidden` from `.board`, handle corner rounding differently:*
-Replace `border-radius + overflow: hidden` with `border-radius` only on individual cells (or on a wrapper). The current design uses `background: var(--accent)` on the board with `overflow: hidden` to show gap color. With careful restructuring this can still work.
-
-*Option B — Position the overlay on a parent wrapper element (recommended):*
-Add a `position: relative` wrapper around the board, then absolutely position the win line overlay on that wrapper. The board keeps `overflow: hidden` for its own purposes, but the overlay sits outside it (as a sibling):
-```html
-<div class="board-wrapper"> <!-- position: relative -->
-  <div class="board" id="board">...</div>
-  <svg class="win-line" id="win-line">...</svg>
-</div>
+**How to avoid:**
+Always verify the MIME type is set correctly. In your nginx config:
+```nginx
+http {
+    include       /etc/nginx/mime.types;    # REQUIRED — includes application/wasm
+    default_type  application/octet-stream;
+    ...
+}
 ```
 
-The SVG/div overlay is a sibling of `.board`, not a child — it isn't clipped.
+And optionally add an explicit override as belt-and-suspenders:
+```nginx
+location ~* \.wasm$ {
+    add_header Content-Type application/wasm;
+    # Also add CORS if needed (see Pitfall 3)
+}
+```
 
-**Detection:** Add a brightly colored `position: absolute` element inside `.board` and verify it gets clipped. That confirms the issue before spending time on the win line implementation.
+**Warning signs:**
+- Chrome DevTools Network tab shows `tic_tac_toe_bg-*.wasm` with `Content-Type: application/octet-stream`
+- Console error: `WebAssembly.compileStreaming(): Response has unsupported MIME type`
+- The `.wasm` request succeeds (200 OK) but the game fails to initialize — misleading
 
-**Phase:** Win line animation phase — resolve layout strategy before writing animation code.
+**Phase to address:** nginx configuration phase — always `include mime.types` first; verify in
+final container smoke test with `curl -I http://localhost/assets/*.wasm`.
 
 ---
 
-### Pitfall 3: Web Audio Context Blocked by Autoplay Policy
-
-**Feature:** Sound effects for moves and game outcomes
+### Pitfall 3: nginx Missing CORS Headers for WASM `instantiateStreaming()` Cross-Origin Scenarios
 
 **What goes wrong:**
-Creating an `AudioContext` before any user gesture results in the context being created in `suspended` state. All sounds queued before the first interaction are silently dropped. On some browsers, the context never resumes without explicit `audioCtx.resume()` in response to a user gesture.
+`WebAssembly.instantiateStreaming()` requires the server to respond with the correct MIME type
+AND (if the page and WASM file are on different origins) proper CORS headers. For the Docker
+container serving everything on the same origin, CORS is not required. But if the image is later
+deployed behind a CDN or if the WASM assets are served from a different subdomain, the lack of
+CORS headers will cause `instantiateStreaming()` to fail even with the correct MIME type.
 
-Developers create `AudioContext` at module load time (alongside `new WasmGame()` in `main()`), play sounds normally in response to clicks, and then wonder why sounds don't play on the first click.
+Additionally: some security scanners flag missing `Cross-Origin-Embedder-Policy` (COEP) and
+`Cross-Origin-Opener-Policy` (COOP) headers, which are required for `SharedArrayBuffer` but also
+sometimes required by hosting platforms' security policies.
 
 **Why it happens:**
-All major browsers implement the Autoplay Policy (formalized ~2018, enforced strictly since 2020). The policy requires user gesture → audio start. Creating `AudioContext` before the first interaction is technically allowed, but the context starts `suspended`. MDN: "if you create the context outside of a user gesture, its state will be set to suspended."
+The static game works fine with Vite's dev server (which sets these headers automatically for
+development). The Docker/nginx production configuration is written fresh and these headers are
+omitted since they're not obviously required for a single-origin static site.
 
-The first cell click IS a user gesture and DOES resume a suspended context — but only if you call `audioCtx.resume()` explicitly. If you don't check `audioCtx.state === 'suspended'`, the sound code runs but produces no output.
-
-**Consequences:**
-- First move in every game session is silent (the most important sound UX moment)
-- No error thrown, no warning in console — silent failure
-- Hard to reproduce in development if you click the page as part of dev workflow
-
-**Prevention:**
-```js
-// Create AudioContext lazily or check state before playing
-async function playSound(audioCtx, buffer) {
-  if (audioCtx.state === 'suspended') {
-    await audioCtx.resume();
-  }
-  const source = audioCtx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(audioCtx.destination);
-  source.start(0);
+**How to avoid:**
+Add security headers to the nginx config for production hardening:
+```nginx
+location / {
+    add_header Cross-Origin-Opener-Policy "same-origin";
+    add_header Cross-Origin-Embedder-Policy "require-corp";
+    add_header X-Content-Type-Options "nosniff";
 }
 ```
 
-For this game, the cleanest approach is to initialize `AudioContext` on the first user click (lazy init), not in `main()`. The click handlers already exist (`handleCellClick`, `resetGame`) — hook in there.
+For WASM specifically, `X-Content-Type-Options: nosniff` ensures the browser respects the
+`Content-Type` header and doesn't sniff the binary as something else.
 
-**Mute toggle interaction:** If the user mutes then unmutes, don't destroy and recreate `AudioContext`. Use a `GainNode` with `gain.value = 0` for mute — the context stays running, the mute is instant. Destroying/recreating `AudioContext` is expensive and can cause audio glitches.
+**Warning signs:**
+- WASM loads fine in the Docker container locally but fails when deployed to a CDN
+- Browser console shows CORS errors referencing `.wasm` files
+- Security scanner reports missing COEP/COOP headers
 
-**Detection:** Load the game in a fresh incognito window. Click a cell immediately. If no sound plays, autoplay policy is blocking.
-
-**Phase:** Sound effects phase — must handle lazy init and suspended-state resume from day one.
+**Phase to address:** nginx configuration phase — include security headers from the start;
+test with a security header scanner before calling deployment complete.
 
 ---
 
-### Pitfall 4: AudioContext Accumulates Nodes (Memory Leak Pattern)
-
-**Feature:** Sound effects for moves and game outcomes
+### Pitfall 4: Vite SPA Routing — Direct URL Access Returns nginx 404
 
 **What goes wrong:**
-`AudioBufferSourceNode` is a single-use object — it cannot be restarted after `source.start()`. Each sound play creates a new node. If the node isn't explicitly disconnected, old nodes accumulate in the audio graph, consuming memory. In a long game session, this can cause audible artifacts or excessive memory use.
+This project is a single-page application with a single `index.html`. nginx serves static files,
+and a request to `/` returns `index.html` correctly. But if any path is accessed directly (e.g.,
+a cached bookmark, a reload on a non-root path), nginx returns 404 because there's no file at
+that path on disk.
+
+For *this specific game* (no client-side routing, single HTML file), this pitfall is LOW severity —
+the user always lands on `/` and there are no sub-routes. But if the Docker image is ever used
+as a template or extended, the missing `try_files` directive will cause confusion.
 
 **Why it happens:**
-MDN: "An `AudioBufferSourceNode` can only be played once; after each call to `start()`, you have to create a new node if you want to play the same sound again." Developers cache the source node and call `start()` again — throws a DOM exception. Or they create new nodes per play but forget to disconnect finished nodes.
+Default nginx config tries to serve files at the literal request path. SPAs use client-side
+routing and don't have corresponding files. Vite's build output is always `index.html` at root.
 
-**Prevention:**
-```js
-function playBuffer(audioCtx, gainNode, buffer) {
-  const source = audioCtx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(gainNode);  // always connect through the gain node (for mute)
-  source.onended = () => source.disconnect();  // clean up when done
-  source.start(0);
+**How to avoid:**
+Add `try_files` to the nginx location block:
+```nginx
+location / {
+    root   /usr/share/nginx/html;
+    index  index.html;
+    try_files $uri $uri/ /index.html;
 }
 ```
 
-The `onended` callback disconnects the node after playback, preventing accumulation. This is the canonical pattern.
+This serves real files (like `assets/tic_tac_toe_bg-*.wasm`) when they exist, and falls back to
+`index.html` for everything else. This is safe for Vite's content-hashed asset files because they
+always exist in `dist/assets/`.
 
-**Detection:** Play the game many times rapidly. Check memory usage in DevTools performance profiler — audio node count should remain stable, not grow with each game.
+**Warning signs:**
+- `curl http://localhost/something` returns nginx 404 instead of `index.html`
+- Hard refresh in browser on any non-root URL shows nginx 404 page
 
-**Phase:** Sound effects phase — include `onended` cleanup from the first implementation.
+**Phase to address:** nginx configuration phase — include `try_files` in the initial config
+even if this game doesn't have sub-routes.
 
 ---
 
-### Pitfall 5: Computer Thinking Delay Conflicts with isProcessing Guard
-
-**Feature:** Computer "thinking" delay (300–800ms)
+### Pitfall 5: `target/` and `node_modules/` Included in Build Context, Bloating Context Transfer
 
 **What goes wrong:**
-The current code has a synchronous computer move:
-```js
-isProcessing = true;
-const compPos = game.computer_move();
-renderBoard();
-isProcessing = false;
-```
+`docker buildx build .` sends the entire working directory as the build context to the Docker
+daemon. For a Rust + Node.js project, the working directory contains:
+- `target/` — Rust compilation cache (can be **gigabytes** for a project with WASM targets)
+- `node_modules/` — npm dependencies (typically 50–200MB)
+- `pkg/` — previously built WASM output
+- `dist/` — previously built Vite output
 
-When introducing a delay via `setTimeout`, the `isProcessing` flag is set `true` before the timeout fires and set `false` only inside the timeout callback. This means during the delay, clicks are correctly blocked. BUT: if the "New Game" button is shown during a delay (it's only shown after game over, so this is rare), resetting the game could clear `isProcessing` while the timeout callback is still pending — when the timeout fires, `game.computer_move()` runs on a reset game state.
-
-More critically: if the delay is implemented carelessly with `await new Promise(resolve => setTimeout(resolve, delay))` inside `handleCellClick`, the async function may not properly guard against re-entry. The existing `if (isProcessing) return` guard at the top is still evaluated synchronously, but multiple async call chains could be in flight.
+Sending gigabytes of build cache as context wastes time before the first `FROM` even executes.
+On slow CI runners or when the Dockerfile doesn't use these directories (the Dockerfile installs
+fresh), this is pure waste.
 
 **Why it happens:**
-Converting synchronous game logic to async (with delays) without updating the concurrency guard pattern. The guard was designed for synchronous execution — it works perfectly now, but `async/await` with delays creates new re-entrancy windows.
+`.dockerignore` is easy to forget for projects that didn't start Docker-first. Rust developers
+know `target/` is large but may not realize Docker sees it. Node developers know `node_modules/`
+but may focus on Rust-side ignores.
 
-**Consequences:**
-- Computer calls `computer_move()` on a freshly reset board
-- Potential double-move, invalid state, or JS exception
-- Hard to reproduce (timing-dependent race condition)
+**How to avoid:**
+Create a `.dockerignore` file covering both ecosystems:
+```
+# Rust build artifacts (can be gigabytes)
+target/
 
-**Prevention:**
+# Previously built outputs (Dockerfile rebuilds these)
+pkg/
+dist/
 
-1. Store the pending timeout ID so it can be cancelled:
-```js
-let thinkingTimer = null;
+# Node.js dependencies (installed fresh inside Docker)
+node_modules/
 
-// In resetGame():
-if (thinkingTimer) {
-  clearTimeout(thinkingTimer);
-  thinkingTimer = null;
-  isProcessing = false;
-}
+# Development and test files
+test.html
+*.log
+.git/
+.gitignore
+.github/
+
+# Planning and documentation (not needed in image)
+.planning/
+AGENTS.md
+README.md
+
+# Editor and OS files
+.DS_Store
+.vscode/
+*.swp
 ```
 
-2. In the timeout callback, check game state is still valid before calling WASM:
-```js
-thinkingTimer = setTimeout(() => {
-  thinkingTimer = null;
-  // Guard: was the game reset during our delay?
-  if (game.get_status() !== 'playing') {
-    isProcessing = false;
-    boardEl.classList.remove('board--disabled');
-    return;
-  }
-  const compPos = game.computer_move();
-  // ...
-}, delay);
-```
+**Critical:** Both `target/` AND `node_modules/` must be ignored for a Rust+Node project.
+Ignoring only one is a common mistake.
 
-**Detection:** Click a cell, then immediately click "New Game" during the thinking delay. Verify the computer doesn't move on the new game's board.
+**Warning signs:**
+- Docker build shows `Sending build context to Docker daemon  2.5GB` (or similar large size)
+- Build is slow before any `RUN` step executes
+- `docker build -f Dockerfile --no-cache .` takes 60+ seconds just on context transfer
 
-**Phase:** Computer delay phase — update `resetGame()` to cancel pending timers.
+**Phase to address:** `.dockerignore` creation phase — create BEFORE the first `docker build`.
+Verify with: `docker build --dry-run .` or inspect context size in build output.
 
 ---
 
-### Pitfall 6: localStorage Throws in Private/Incognito Mode and file:// Protocol
-
-**Feature:** Persistent scores via localStorage
+### Pitfall 6: `Cargo.lock` Not Copied into Build Stage — Non-Reproducible Rust Builds
 
 **What goes wrong:**
-Calling `localStorage.setItem()` or `localStorage.getItem()` throws a `SecurityError` exception when:
-- User is in private/incognito browsing mode AND their browser is configured to block storage
-- Page is served from `file://` (not relevant for this Vite project, but can affect test.html)
-- User has explicitly disabled cookies/storage in browser settings
-
-This is a silent failure in development (developer's browser settings allow storage) but crashes for some users in production. The exception propagates up and can break score persistence without any visible error.
-
-MDN: "Thrown in one of the following cases: The origin is not a valid scheme/host/port tuple... The request violates a policy decision."
+The Dockerfile copies `Cargo.toml` to install dependencies before copying source code (a common
+layer caching pattern). If `Cargo.lock` is omitted from the COPY instruction (or from the build
+context via `.dockerignore`), Cargo performs dependency **resolution** on every build and may
+pull newer patch versions of crates. This breaks build reproducibility and can introduce
+surprising compilation failures in CI when a new crate version has a breaking change.
 
 **Why it happens:**
-Developers always test in their own browser with default settings. Incognito-with-storage-blocked is common for privacy-focused users. The exception is thrown at the `localStorage` access itself — not at read time later.
+Developers familiar with Node.js Docker caching use the `COPY package.json package-lock.json ./`
++ `RUN npm ci` pattern, which correctly pins to the lockfile. The Rust equivalent is less
+well-known: both `Cargo.toml` AND `Cargo.lock` must be copied before `RUN cargo` to get pinned
+dependencies.
 
-**Consequences:**
-- Scores silently fail to persist (if caught); or game crashes (if uncaught)
-- Inconsistent behavior: works for developer, broken for some users
-- Stack traces pointing at localStorage code confuse developers who never saw the error
-
-**Prevention:**
-Wrap all `localStorage` operations in try/catch:
-```js
-function saveScores(score) {
-  try {
-    localStorage.setItem('ttt-scores', JSON.stringify(score));
-  } catch {
-    // Storage blocked (private mode, file://, security policy) — fall back to in-memory
-  }
-}
-
-function loadScores() {
-  try {
-    const saved = localStorage.getItem('ttt-scores');
-    return saved ? JSON.parse(saved) : null;
-  } catch {
-    return null;
-  }
-}
+**How to avoid:**
+```dockerfile
+# Copy both manifest and lockfile for reproducible dependency resolution
+COPY Cargo.toml Cargo.lock ./
+# Then copy source
+COPY src/ ./src/
+RUN wasm-pack build --target web --release
 ```
 
-Also validate parsed data — `JSON.parse()` can return unexpected shapes if localStorage was manually modified. Always check that the loaded object has the expected shape before using it.
+Also ensure `Cargo.lock` is **not** in `.dockerignore` and **is** committed to git.
+For library crates, `Cargo.lock` is sometimes gitignored (Cargo convention for published libs),
+but for applications and binaries (including WASM games), it must be committed and included.
 
-**Detection:** Open in incognito mode, verify scores still display (as 0) even if they can't be saved.
+**Warning signs:**
+- Build succeeds locally but fails in CI with "failed to select a version for `xyz`"
+- Different build runs produce different `.wasm` binary sizes
+- `cargo update` was not run but a dependency version changed in the Docker image
 
-**Phase:** localStorage phase — wrap on first write, never raw-access localStorage.
+**Phase to address:** Dockerfile creation phase — include `Cargo.lock` in the first COPY.
 
 ---
 
-### Pitfall 7: Dark Mode Causes FOUC (Flash of Unstyled Content / Flash of Wrong Color)
-
-**Feature:** Dark mode support respecting `prefers-color-scheme`
+### Pitfall 7: Multi-Arch Build Fails to Push Without `--push` Flag (Images Not Accessible Locally)
 
 **What goes wrong:**
-The existing design is already dark navy (`--bg: #1a1a2e`). When adding light mode support via `@media (prefers-color-scheme: light)`, the CSS variables are overridden. If those overrides are defined in an external stylesheet loaded asynchronously, or if JavaScript is reading/writing `data-theme` attributes to the `<html>` element, users with light mode may briefly see the dark theme before the correct colors are applied. This flash is jarring.
+Running:
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t user/app:latest .
+```
+without `--push` (or `--output type=image,push=true`) succeeds but **does not load the multi-arch
+manifest into the local Docker image store**. The output exists only in buildx's internal cache.
+`docker images` shows nothing. `docker run user/app:latest` fails with "image not found."
 
-Additionally, if you add a manual theme toggle (user can override their OS preference) and store the preference in localStorage, there's a window between page load and JS execution where the OS preference is applied before the manual preference loads.
+Additionally, attempting `--load` with multi-arch builds fails because the local Docker image
+store (classic storage drivers) cannot represent multi-platform manifests:
+```
+error: docker exporter does not currently support exporting manifest lists
+```
 
 **Why it happens:**
-CSS `@media (prefers-color-scheme: light)` is evaluated by the browser as the stylesheet parses. No flash if done purely in CSS. Flash happens when:
-- Theme is applied via a `data-theme` attribute set by JavaScript
-- JavaScript reads localStorage to determine the initial theme
-- The `<link>` stylesheet loads after initial paint
+Multi-arch manifests require a registry to store the manifest list. The local Docker engine
+traditionally stores single-platform images. This is a fundamental constraint of buildx multi-arch
+builds — they must be pushed to a registry or use the containerd image store.
 
-**Prevention:**
-For this project, the cleanest implementation is **CSS-only for the initial theme** — no JS needed for `prefers-color-scheme`. Add overrides directly in `style.css`:
-```css
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f0f0f5;
-    --surface: #ffffff;
-    --text: #1a1a2e;
-    /* etc. */
-  }
-}
+**How to avoid:**
+In GitHub Actions, always use `--push` (via `docker/build-push-action` with `push: true`):
+```yaml
+- name: Build and push
+  uses: docker/build-push-action@v7
+  with:
+    platforms: linux/amd64,linux/arm64
+    push: true
+    tags: ${{ steps.meta.outputs.tags }}
 ```
 
-Since the CSS is inlined via `<link rel="stylesheet" href="/src/style.css" />` which loads synchronously in the `<head>`, there is no flash — the correct colors are set before first paint.
-
-If adding a manual toggle, use the pattern:
-```html
-<!-- In <head>, before stylesheet: -->
-<script>
-  // Runs before CSS — sets theme class synchronously to prevent flash
-  const saved = localStorage.getItem('ttt-theme');
-  if (saved) document.documentElement.dataset.theme = saved;
-</script>
+For local testing, build single-platform with `--load`:
+```bash
+# Local test: single platform
+docker buildx build --platform linux/amd64 --load -t user/app:test .
+docker run --rm -p 8080:80 user/app:test
 ```
 
-This inline script runs before CSS is applied and eliminates the flash.
+**Warning signs:**
+- `docker buildx build --platform ... .` exits 0 but `docker images` shows nothing
+- `error: docker exporter does not currently support exporting manifest lists` when using `--load`
+- Confusion about whether the build "worked" because it exited without error
 
-**Detection:** In macOS: System Preferences → Appearance → Light. Open the game. A flash from dark→light means FOUC. It should appear in the correct colors immediately.
-
-**Phase:** Dark mode phase — implement as CSS-only first; add JS toggle only if required, with the inline script pattern.
+**Phase to address:** GitHub Actions workflow phase — always use `push: true` in the workflow;
+document local testing command with single-platform `--load`.
 
 ---
 
-## Moderate Pitfalls
-
-Issues that cause bugs or poor UX but don't require major restructuring to fix.
-
----
-
-### Pitfall 8: CSS `transition` on `.cell` Conflicts with Animation on New Piece
-
-**Feature:** CSS animations for piece placement
+### Pitfall 8: Docker Hub Credentials Stored as Plaintext or Using Password Instead of Access Token
 
 **What goes wrong:**
-The existing CSS has `transition: background 0.1s ease` on `.cell`. When a cell gets the `.cell--taken` class added (with a new background color and text), the background color smoothly transitions. If you also add a `@keyframes` animation (e.g., `pop-in`), the two effects can conflict or compound awkwardly:
-- `transition` fades the background while `animation` scales the element
-- On Safari, transitions and animations on the same property can produce unexpected results
-- The `transition` was designed for hover feedback, not for piece placement
+Using Docker Hub account **password** instead of an **access token** in GitHub Actions secrets:
+- Passwords have full account access — if the secret leaks, the attacker owns the Docker Hub account
+- Docker Hub access tokens can be scoped to specific repositories and revoked without changing the password
+- GitHub Actions `docker/login-action` accepts both, making it easy to accidentally use the password
 
-**Prevention:**
-Scope the transition narrowly. Either:
-1. Remove `transition: background` when `.cell--taken` is added (the animation handles the entrance)
-2. Change the transition to only apply to hover-state cells: `.cell:not(.cell--taken) { transition: background 0.1s ease; }`
+A separate mistake: using `${{ secrets.DOCKERHUB_USERNAME }}` for the username when it's not
+actually a GitHub **secret** (it's a public username) — it should be a GitHub **variable**
+(`${{ vars.DOCKERHUB_USERNAME }}`). Storing non-secret data as secrets obscures configuration
+and doesn't provide security benefit.
 
-The second option is clean and already logically correct — taken cells shouldn't respond to hover anyway.
+**Why it happens:**
+The Docker Hub "password" works in `docker login`, so developers use it. The distinction between
+GitHub Actions `secrets` and `vars` is not prominent. Many tutorials use `${{ secrets.DOCKERHUB_USERNAME }}`
+because it "works" — but the pattern leaks a public value through the secrets mechanism.
 
-**Phase:** Animations phase — audit existing transitions before adding animations.
+**How to avoid:**
+1. Create a Docker Hub access token with scope: **Read & Write** for the specific repository
+   (Settings → Security → Access Tokens)
+2. Store the token in GitHub secrets as `DOCKERHUB_TOKEN`
+3. Store the username as a GitHub **variable** (`vars.DOCKERHUB_USERNAME`), not a secret
+
+```yaml
+- name: Login to Docker Hub
+  uses: docker/login-action@v4
+  with:
+    username: ${{ vars.DOCKERHUB_USERNAME }}    # variable, not secret
+    password: ${{ secrets.DOCKERHUB_TOKEN }}     # access token, not password
+```
+
+**Warning signs:**
+- GitHub Actions secrets list contains `DOCKERHUB_USERNAME` (should be a variable)
+- Docker Hub access shows all-repositories access (should be repository-scoped)
+- Security audit finds credentials with excessive permissions
+
+**Phase to address:** GitHub Actions workflow phase — set up credentials before writing any
+workflow code; use access tokens from day one.
 
 ---
 
-### Pitfall 9: Win Line SVG Coordinate System Doesn't Match CSS Grid
-
-**Feature:** Animated win line through winning cells
+### Pitfall 9: Tag `latest` Applied to Every Push, Including Work-in-Progress Commits
 
 **What goes wrong:**
-The board is sized with `var(--board-size): min(90vw, 90vh, 440px)` and laid out with CSS Grid. An SVG overlay sized at `100% x 100%` of the board wrapper should have its coordinate system match the board. But if the board wrapper and SVG don't share the same bounding box (due to padding, border, or `overflow: visible` spilling), the calculated cell center coordinates for the SVG line don't align with the visual cell centers.
+A naive CI workflow that pushes on every commit with `tags: user/app:latest` means every pushed
+commit — including debugging commits, half-finished features, and commits that "accidentally" pass
+CI — overwrites the `latest` tag on Docker Hub. Users who run `docker pull user/app` get whatever
+was last pushed, not necessarily a real release.
 
-Additionally: the board uses `gap: var(--cell-gap)` (4px). Win line calculations that assume uniform cell width (`boardSize / 3`) are off by `gap / 3` per cell — small but visible.
+For this project, the planned behavior is: **publish only on git tag push**. A manual `latest`
+tag in a push-on-every-commit workflow defeats this entirely.
 
-**Prevention:**
-Calculate cell centers from actual DOM measurements, not CSS math:
-```js
-function getCellCenter(cellEl, boardEl) {
-  const cellRect = cellEl.getBoundingClientRect();
-  const boardRect = boardEl.getBoundingClientRect();
-  return {
-    x: cellRect.left + cellRect.width / 2 - boardRect.left,
-    y: cellRect.top + cellRect.height / 2 - boardRect.top,
-  };
-}
+**Why it happens:**
+Copy-pasting workflows from tutorials that show `tags: user/app:latest`. The `latest` tag in
+Docker has special meaning (it's what `docker pull name` resolves to by default) but Docker Hub
+doesn't enforce any semantics — anything can overwrite it at any time.
+
+**How to avoid:**
+Use `docker/metadata-action` with `type=semver` tags triggered only on `refs/tags/v*` pushes:
+
+```yaml
+on:
+  push:
+    tags:
+      - 'v*.*.*'    # Only trigger on version tags like v1.2.0
+
+jobs:
+  docker:
+    steps:
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: user/tic-tac-toe
+          tags: |
+            type=semver,pattern={{version}}          # e.g. 1.2.0
+            type=semver,pattern={{major}}.{{minor}}  # e.g. 1.2
+            type=raw,value=latest,enable={{is_default_branch}}
 ```
 
-This is immune to gap size, padding, or board-size changes. Always measure from the DOM rather than computing from CSS values.
+With this configuration:
+- `git tag v1.2.0 && git push --tags` → publishes `1.2.0`, `1.2`, and `latest`
+- Regular commits → no Docker Hub push at all
 
-**Phase:** Win line animation phase — use `getBoundingClientRect()` for coordinate calculation.
+**Warning signs:**
+- GitHub Actions workflow triggers on `push:` to branches (not just tags)
+- `tags: user/app:latest` is hardcoded in the workflow (not from metadata-action)
+- Docker Hub shows recent push timestamps that don't correspond to releases
+
+**Phase to address:** GitHub Actions workflow phase — use metadata-action from the start;
+trigger on tag push only.
 
 ---
 
-### Pitfall 10: localStorage Key Collision
-
-**Feature:** Persistent scores via localStorage
+### Pitfall 10: Rust Multi-Stage Build Image Size Bloat from Build Dependencies
 
 **What goes wrong:**
-Using a generic key like `"scores"` or `"wins"` risks collision with other applications on the same origin (e.g., another Vite app running on `localhost:5173`). During development, localhost is a shared origin for all local projects.
+The Rust build stage image (`rust:slim` or `rust:alpine`) plus:
+- Full Rust toolchain with std library (~600MB)
+- wasm-pack binary and its dependencies (~50MB)
+- Cargo build cache with all dependencies (~150MB for this project)
+- wasm32-unknown-unknown target (~60MB)
+- Node.js + npm (~100MB)
+- node_modules (~50MB for this project)
 
-**Prevention:**
-Use a namespaced key: `'ttt-v1-scores'` (app prefix + version). The version suffix allows clean migration if the stored data shape changes in future:
-```js
-const STORAGE_KEY = 'ttt-v1-scores';
+... totals **~1GB+** in the build stage. Without multi-stage builds, this entire stack would
+ship as the final image. With a correct multi-stage build, the **serve stage** is just:
+- `nginx:alpine` base (~8MB)
+- `dist/` static files (JS + CSS + WASM, ~80KB total for this project)
+
+The final image should be **~8–10MB**. If it's larger, the multi-stage build has a mistake.
+
+**Common mistakes that inflate the serve stage:**
+1. `COPY . .` in the serve stage instead of `COPY --from=build /app/dist /usr/share/nginx/html`
+2. Installing additional tools in the serve stage (curl, vim, build-essential)
+3. Using `rust:latest` or `node:latest` as the serve stage base (not `nginx:alpine`)
+4. Forgetting `--from=build` in the COPY — copies from the local filesystem into the serve layer
+
+**How to avoid:**
+```dockerfile
+# Build stage — will NOT be included in the final image
+FROM --platform=$BUILDPLATFORM rust:slim AS build
+WORKDIR /app
+
+# Install Node.js in the build stage only
+RUN apt-get update && apt-get install -y curl nodejs npm && rm -rf /var/lib/apt/lists/*
+
+# Install wasm-pack
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+# Add WASM target
+RUN rustup target add wasm32-unknown-unknown
+
+# Copy and build Rust
+COPY Cargo.toml Cargo.lock ./
+COPY src/ ./src/
+RUN wasm-pack build --target web --release
+
+# Copy and build JS
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY index.html vite.config.js ./
+RUN npm run build
+
+# Serve stage — this is the final image
+FROM nginx:alpine AS serve
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 ```
 
-If the score schema changes (e.g., adding a new field), bump to `ttt-v2-scores` and let v1 data expire naturally.
+Verify final image size:
+```bash
+docker buildx build --platform linux/amd64 --load -t tic-tac-toe:test .
+docker image ls tic-tac-toe:test
+# Should show ~10MB, not hundreds of MB
+```
 
-**Phase:** localStorage phase — namespace keys from first implementation.
+**Warning signs:**
+- `docker image ls` shows the image as >50MB
+- Build stage packages (cargo, rustup, npm, node_modules) appear in `docker exec` of the container
+- `docker history` shows large layers in the final image that shouldn't be there
+
+**Phase to address:** Dockerfile creation phase — verify image size immediately after first build;
+fix before adding CI.
 
 ---
 
-### Pitfall 11: Mute State Not Persisted Across Sessions
+## Technical Debt Patterns
 
-**Feature:** Sound effects with mute toggle
+Shortcuts that seem reasonable but create long-term problems.
 
-**What goes wrong:**
-Users toggle mute, refresh the page, and find themselves back with sound on. For a game with sound effects (which some users find annoying), this is worse than no mute toggle at all — the user must mute again every session.
-
-**Prevention:**
-Persist the mute preference in localStorage alongside scores:
-```js
-const MUTE_KEY = 'ttt-v1-muted';
-let isMuted = localStorage.getItem(MUTE_KEY) === 'true';
-
-function toggleMute() {
-  isMuted = !isMuted;
-  gainNode.gain.value = isMuted ? 0 : 1;
-  try { localStorage.setItem(MUTE_KEY, String(isMuted)); } catch {}
-  updateMuteButton();
-}
-```
-
-The mute button UI should also reflect the persisted state on page load.
-
-**Phase:** Sound effects phase AND localStorage phase should be designed together so both are persisted.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Using `rust:latest` as build base (not pinned version) | Always uses newest Rust | Build may break when Rust updates (edition changes, API changes) | Never for CI; pin to `rust:1` or `rust:slim` |
+| Building both platforms under QEMU (no `--platform=$BUILDPLATFORM`) | Simpler Dockerfile | arm64 build is 10–30× slower; may timeout in CI | Never — use `--platform=$BUILDPLATFORM` always |
+| Using Docker Hub password instead of access token | Works immediately | Full account exposure if secret leaks | Never — access tokens are free and scoped |
+| `latest` tag on every commit push | Simple workflow | Latest tag is unstable; users get WIP builds | Never for a public image |
+| No `.dockerignore` | No extra file to maintain | Multi-GB build context; slow builds | Never — create `.dockerignore` with first Dockerfile |
+| Single-stage Dockerfile (no multi-stage) | Simpler file | ~1GB final image instead of ~10MB | Never — multi-stage is the standard for compiled projects |
+| `RUN npm install` instead of `npm ci` | Allows version range resolution | Non-reproducible builds; ignores package-lock.json | Never in Docker builds |
 
 ---
 
-### Pitfall 12: `prefers-color-scheme` Doesn't React to OS Changes Without `matchMedia` Listener
+## Integration Gotchas
 
-**Feature:** Dark mode support
+Common mistakes at the boundary between Rust and Node.js in the same Dockerfile.
 
-**What goes wrong:**
-CSS `@media (prefers-color-scheme)` automatically reacts to OS-level theme changes — the browser re-evaluates media queries and applies new styles without any JavaScript. However, if a manual theme toggle is added via a `data-theme` attribute on `<html>`, that attribute overrides the media query. When the user changes their OS theme after the page loads, the CSS media query fires but the JS-applied `data-theme` attribute takes precedence in the cascade, and nothing visually changes.
-
-**Prevention:**
-If adding a manual toggle, also add a `matchMedia` listener so the UI (toggle button state) stays in sync:
-```js
-const mq = window.matchMedia('(prefers-color-scheme: dark)');
-mq.addEventListener('change', () => {
-  if (!localStorage.getItem('ttt-theme')) {
-    // Only sync if user hasn't set a manual preference
-    updateThemeDisplay();
-  }
-});
-```
-
-For this project, if the scope is just `prefers-color-scheme` without a manual toggle, no JavaScript is needed — CSS handles it automatically and always stays in sync.
-
-**Phase:** Dark mode phase — keep JS out of pure-CSS dark mode; only add JS if manual toggle is required.
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| wasm-pack output → Vite input | `wasm-pack build` writes to `pkg/`; `COPY` only copies `src/` and misses `pkg/` for Vite | Run `wasm-pack build` before `npm run build`; both in the same stage; Vite reads from `pkg/` in the same directory |
+| Two package managers | Installing Node.js in the same `RUN` as Rust tools, then cleaning up later | Install Node.js early, clean apt cache in the same `RUN` layer to avoid layer size inflation |
+| COPY ordering for cache efficiency | `COPY . .` before `npm ci` — any source change invalidates the npm cache layer | Copy package files first: `COPY package.json package-lock.json ./` + `RUN npm ci`, then `COPY . .` |
+| Cargo.lock in `.dockerignore` | Accidentally ignoring `Cargo.lock` makes builds non-reproducible | Explicitly list what to ignore; never add `*.lock` glob patterns |
+| wasm-pack binary not on PATH | After `curl | sh` install, wasm-pack is in `~/.cargo/bin/` which may not be on PATH for subsequent RUN layers | Add `ENV PATH="/root/.cargo/bin:${PATH}"` after installing wasm-pack |
 
 ---
 
-## Minor Pitfalls
+## Performance Traps
 
-Small issues that cause subtle bugs or polish problems.
+Patterns that slow CI significantly.
 
----
-
-### Pitfall 13: Thinking Delay Status Text Race with Animation Timing
-
-**Feature:** Computer thinking delay + CSS animations
-
-**What goes wrong:**
-With a 300–800ms thinking delay, the "Computer's turn" status message appears, then the status changes to "Your turn" after the computer moves. If piece placement has a 200ms animation, the visual timeline becomes:
-- T+0ms: Human places piece, animation starts
-- T+200ms: Animation ends
-- T+300–800ms: Computer places piece, animation starts
-- T+500–1000ms: Computer animation ends, "Your turn" restored
-
-This is fine. But if the animation and delay use different `setTimeout` chains that are not coordinated, the "Your turn" message can appear while the computer's animation is still running — a minor but noticeable inconsistency.
-
-**Prevention:**
-Structure the flow as a sequential async chain:
-```
-humanMove → renderWithAnimation → await animationDone → 
-await thinkingDelay → computerMove → renderWithAnimation → 
-await animationDone → updateStatus('Your turn')
-```
-
-`animationDone` can be awaited with a `transitionend` or `animationend` listener:
-```js
-function waitForAnimation(el) {
-  return new Promise(resolve => {
-    el.addEventListener('animationend', resolve, { once: true });
-  });
-}
-```
-
-**Phase:** Animations + computer delay phase — coordinate animation timing with delay timing.
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| No Cargo build cache between CI runs | Every build downloads + compiles all dependencies from scratch (2–5 min) | Use `docker/build-push-action` with `cache-from: type=gha` + `cache-to: type=gha,mode=max` | Every CI run without cache |
+| No npm ci cache between CI runs | npm downloads all packages each run | Cache `/root/.npm` in the build stage via BuildKit cache mount: `--mount=type=cache,target=/root/.npm` | Every CI run without cache |
+| Both platforms built sequentially on one runner | arm64 QEMU build adds 10–30× time | Use `--platform=$BUILDPLATFORM` so Rust only compiles once natively | Every multi-arch build |
+| `mode=min` for GHA cache | Only caches the result layer, not intermediate layers | Use `cache-to: type=gha,mode=max` to cache all layers | On cache miss — full rebuild |
 
 ---
 
-### Pitfall 14: Win-State Animation Fires Then Board Immediately Clears
+## Security Mistakes
 
-**Feature:** CSS animations + win line
-
-**What goes wrong:**
-`handleGameOver()` currently calls `renderBoard(winPositions)` which highlights winning cells, then shows the restart button. The user clicks "New Game" immediately, and `resetGame()` calls `renderBoard()` without winning positions — all animations/highlights disappear instantly.
-
-This is already partially addressed by `restartBtn.hidden = false` — the button appearing gives users time to see the result. But if the win line animation has a duration of 500ms and the user is a fast clicker, they can dismiss it before the animation completes.
-
-**Prevention:**
-Delay enabling the restart button by the animation duration:
-```js
-// In handleGameOver():
-restartBtn.hidden = false;
-restartBtn.disabled = true; // prevent immediate click
-setTimeout(() => { restartBtn.disabled = false; }, WIN_ANIMATION_DURATION_MS);
-```
-
-Or use `animationend` on the win line element to enable the button.
-
-**Phase:** Animations phase — consider animation duration when determining when to re-enable restart.
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Using Docker Hub password instead of access token in GitHub secrets | Full Docker Hub account compromise if secret leaks | Create repository-scoped access token; store as `DOCKERHUB_TOKEN` |
+| No `X-Content-Type-Options: nosniff` header in nginx | Browser MIME sniffing could misinterpret WASM binary | Add `add_header X-Content-Type-Options nosniff;` to nginx config |
+| Running nginx as root (default) in container | Privilege escalation if nginx is compromised | Use `nginx:alpine` which drops to `nginx` user (uid 101) for worker processes by default |
+| Serving sensitive build artifacts (Cargo.lock, package.json exposed) | Leaks dependency versions for vulnerability scanning | Multi-stage build ensures only `dist/` is in the serve stage — build files never ship |
+| Public Docker Hub image with no README / description | Confused users may not know if it's an official release | Add Docker Hub description in workflow using `docker/hub-description-action` (optional but good practice) |
 
 ---
 
-### Pitfall 15: Synthesized Web Audio Sounds Feel Cheap Without Envelope Shaping
+## "Looks Done But Isn't" Checklist
 
-**Feature:** Sound effects for moves and game outcomes
+Things that appear to work in the happy path but have hidden gaps.
 
-**What goes wrong:**
-Using `OscillatorNode` directly (easiest code-path for "no audio files") produces sounds that click/pop at start and end if the gain isn't shaped. An oscillator started at full gain and stopped abruptly produces an audible click (a DC discontinuity in the waveform). This is the most common Web Audio beginner mistake.
-
-**Prevention:**
-Always use a gain envelope for oscillator-based sounds:
-```js
-function playTone(audioCtx, masterGain, frequency, duration) {
-  const osc = audioCtx.createOscillator();
-  const env = audioCtx.createGain();
-  
-  osc.frequency.value = frequency;
-  osc.type = 'sine';
-  env.gain.setValueAtTime(0, audioCtx.currentTime);                  // start silent
-  env.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.01); // attack
-  env.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration); // decay
-  
-  osc.connect(env);
-  env.connect(masterGain); // masterGain controls global mute
-  osc.start(audioCtx.currentTime);
-  osc.stop(audioCtx.currentTime + duration);
-  osc.onended = () => { osc.disconnect(); env.disconnect(); };
-}
-```
-
-The attack ramp prevents the click at start; the exponential decay prevents the click at stop. Note: `exponentialRampToValueAtTime` cannot ramp to 0 — ramp to a very small value like 0.001 instead.
-
-**Phase:** Sound effects phase — use envelope shaping from the first sound implementation.
+- [ ] **WASM MIME type:** Build succeeds and image runs — verify: `curl -I http://localhost/assets/*.wasm | grep content-type` shows `application/wasm`, not `application/octet-stream`
+- [ ] **Multi-arch manifest:** Image is pushed — verify: `docker manifest inspect user/app:latest` shows both `linux/amd64` and `linux/arm64` manifests
+- [ ] **Image size:** Build succeeds — verify: `docker image ls` shows <20MB for the serve image
+- [ ] **Cargo.lock included:** Build is reproducible — verify: `Cargo.lock` is present in the build context (not in `.dockerignore`, not gitignored)
+- [ ] **arm64 native in serve stage:** Multi-arch built — verify: `docker run --platform linux/arm64 --rm user/app uname -m` shows `aarch64`
+- [ ] **Tag policy:** Workflow runs on tag push — verify: pushing a commit to `main` does NOT trigger a Docker Hub push
+- [ ] **Credential type:** Docker Hub credentials set up — verify: secrets use access token, not password; username is a `vars` not a `secret`
+- [ ] **SPA routing:** nginx config deployed — verify: `curl http://localhost/nonexistent-path` returns `index.html` content (200), not nginx 404
+- [ ] **wasm-pack PATH:** Build runs in CI — verify: `wasm-pack --version` succeeds in the build stage without `command not found`
+- [ ] **No build artifacts in final image:** Multi-stage complete — verify: `docker exec <container> ls /usr/share/nginx/html` shows only `index.html` and `assets/`, not `src/`, `target/`, or `Cargo.toml`
 
 ---
 
-### Pitfall 16: CSS Variable Overrides in Dark Mode Miss Hardcoded Color Values
+## Recovery Strategies
 
-**Feature:** Dark mode support
+When pitfalls occur despite prevention, how to recover.
 
-**What goes wrong:**
-The existing CSS uses `var(--bg)`, `var(--surface)`, `var(--accent)`, `var(--text)`, `var(--text-dim)` consistently in most places. But there are hardcoded hex values:
-- `.cell:hover:not(.cell--taken)` uses `#1e2a4a` (a hardcoded hover color)
-- Error display in `main.js` uses `cssText` with hardcoded `color:#e94560; background:#1a1a2e`
-
-A `@media (prefers-color-scheme: light)` block that overrides CSS variables will correctly update all `var()` usages — but the hardcoded values stay dark regardless of the theme.
-
-**Prevention:**
-Audit for hardcoded colors before adding dark mode:
-- Replace `#1e2a4a` hover background with a new variable `--surface-hover`
-- The JS error display (`main().catch(err => {...})`) uses inline `cssText` — add a theme-appropriate fallback or ensure the error state also reads CSS variables
-
-```css
-:root {
-  --surface-hover: #1e2a4a;  /* new variable */
-}
-@media (prefers-color-scheme: light) {
-  :root {
-    --surface-hover: #e8e8f0;  /* light mode hover */
-  }
-}
-```
-
-**Detection:** Switch to light mode and visually inspect every element for remaining dark colors.
-
-**Phase:** Dark mode phase — audit for hardcoded hex values first.
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| QEMU build timeout | LOW — add `--platform=$BUILDPLATFORM` to build stage FROM | Add `FROM --platform=$BUILDPLATFORM` prefix; re-push; new build completes in normal time |
+| WASM MIME type wrong in production | LOW — nginx config fix, rebuild image | Add explicit MIME type to nginx config; rebuild and push; users just need to refresh |
+| Wrong credentials in CI (password, not token) | LOW — update GitHub secret | Generate new Docker Hub access token; update `DOCKERHUB_TOKEN` secret; revoke old password usage |
+| `latest` tag on wrong commit | MEDIUM — must push a correct release | Create correct version tag; push; metadata-action will regenerate `latest` pointing to correct release |
+| Build context sending gigabytes | LOW — add `.dockerignore` | Create `.dockerignore`; re-run build; context drops to kilobytes immediately |
+| Bloated final image (build deps in serve stage) | MEDIUM — rewrite Dockerfile | Fix multi-stage copy path; rebuild; push; existing pulled images need replacement |
+| Multi-arch manifest not created (only single arch pushed) | MEDIUM — rebuild and push with `--platform` | Add both platforms to buildx command; push new manifest; docker pull will get multi-arch manifest |
 
 ---
 
-## Phase-Specific Warnings
+## Pitfall-to-Phase Mapping
 
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| CSS piece animations | innerHTML wipe kills animation state (Pitfall 1) | Switch to incremental DOM updates or track last-placed cell index |
-| Win line animation | `overflow: hidden` clips overlay (Pitfall 2) | Add a wrapper element; place SVG overlay as sibling of board |
-| Computer delay | Timer not cancelled on reset causes ghost moves (Pitfall 5) | Store timer ID; cancel in `resetGame()` |
-| localStorage | Throws in incognito/private mode (Pitfall 6) | Always wrap in try/catch; degrade gracefully to in-memory |
-| Web Audio | Context suspended before user gesture (Pitfall 3) | Lazy init or explicit `resume()` on first interaction |
-| Web Audio | AudioBufferSourceNode leaks (Pitfall 4) | `onended = () => source.disconnect()` on every node |
-| Dark mode | FOUC if theme applied via JS before CSS loads (Pitfall 7) | Use CSS-only `@media` for initial theme; inline script only if manual toggle added |
-| Dark mode | Hardcoded hex values survive theme change (Pitfall 16) | Audit and replace all hardcoded colors with CSS variables |
-| Animations + delay | Status text out of sync with animation timing (Pitfall 13) | Chain animation completion → delay → computer move as sequential async flow |
-| Win line + restart | Fast-click dismisses win before animation completes (Pitfall 14) | Disable restart button for `WIN_ANIMATION_DURATION_MS` after game over |
-
----
-
-## Existing Codebase Considerations
-
-Specific things about *this* codebase that affect v1.1 implementation:
-
-| Code Pattern | Impact on v1.1 | Recommendation |
-|-------------|----------------|----------------|
-| `boardEl.innerHTML = ''` in every `renderBoard()` | Animation classes added before render are destroyed | Must choose incremental update OR track "new cell" index before wipe |
-| `isProcessing` flag is synchronous guard | Works for delay, but `resetGame()` must cancel pending timer | Store `thinkingTimer` ID; cancel in `resetGame()` |
-| Score is in-memory `const score = {}` | Clean upgrade path to localStorage — just add load/save wrappers | Don't restructure score object; wrap access functions around it |
-| All CSS in a single `style.css` via `var()` | Dark mode via `@media (prefers-color-scheme: light)` works perfectly | Just override `:root` vars in the media query |
-| `overflow: hidden` on `.board` | Win line overlay must be a sibling, not a child | Add `.board-wrapper` with `position: relative` |
-| No existing `<audio>` elements or Audio API usage | Clean state — no legacy patterns to work around | Create AudioContext lazily on first user gesture |
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| QEMU slowness / arm64 compile | Dockerfile creation | Build time for arm64 stage is <2× amd64 time |
+| WASM MIME type | nginx configuration | `curl -I http://localhost/assets/*.wasm` shows `application/wasm` |
+| CORS / security headers | nginx configuration | Security header scanner returns no critical findings |
+| SPA routing / nginx 404 | nginx configuration | All paths return 200 with index.html content |
+| `.dockerignore` missing | Before first `docker build` | Build context size is <1MB |
+| `Cargo.lock` excluded | Dockerfile creation | Two successive builds produce identical `.wasm` binary checksums |
+| Multi-arch not pushed | GitHub Actions workflow | `docker manifest inspect` shows amd64 + arm64 |
+| Docker Hub password vs token | Credentials setup | GitHub secret name ends in `_TOKEN`, not `_PASSWORD` |
+| Tag `latest` on every push | GitHub Actions workflow | Push to main branch; verify no Docker Hub push occurs |
+| Image size bloat | Dockerfile creation | `docker image ls` shows <20MB |
 
 ---
 
 ## Sources
 
-- [MDN: Web Audio API — Autoplay Policy](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Best_practices#autoplay_policy) — HIGH confidence (official, updated 2025-09-18)
-- [MDN: Web Audio API — Using the Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Using_Web_Audio_API) — HIGH confidence (official, updated 2025-09-18)
-- [MDN: Window.localStorage — Exceptions (SecurityError)](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage#exceptions) — HIGH confidence (official, updated 2025-11-30)
-- [MDN: prefers-color-scheme](https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-color-scheme) — HIGH confidence (official, updated 2025-12-05)
-- Codebase analysis: `src/main.js`, `src/style.css`, `index.html` — HIGH confidence (direct inspection)
+- [Docker: Multi-platform image docs](https://docs.docker.com/build/building/multi-platform/) — HIGH confidence (official, 2026)
+  — `--platform=$BUILDPLATFORM` pattern, QEMU limitations warning
+- [Docker: GitHub Actions multi-platform](https://docs.docker.com/build/ci/github-actions/multi-platform/) — HIGH confidence (official, 2026)
+  — `docker/setup-qemu-action`, `docker/build-push-action` patterns
+- [Docker: GitHub Actions cache backend](https://docs.docker.com/build/cache/backends/gha/) — HIGH confidence (official, 2026)
+  — `type=gha,mode=max` cache configuration
+- [docker/metadata-action README](https://github.com/docker/metadata-action) — HIGH confidence (official, 2026)
+  — Tag semver patterns, `latest` tag management, `vars.DOCKERHUB_USERNAME` vs `secrets.DOCKERHUB_TOKEN`
+- [MDN: WebAssembly Loading and Running](https://developer.mozilla.org/en-US/docs/WebAssembly/Guides/Loading_and_running) — HIGH confidence (official, updated 2025-08-26)
+  — `instantiateStreaming()` requires correct MIME type
+- [nginx Docker Hub official image](https://hub.docker.com/_/nginx) — HIGH confidence (official, 2026)
+  — nginx:alpine architecture support, user/group IDs, configuration patterns
+- Codebase inspection: `Cargo.toml`, `package.json`, `vite.config.js`, `dist/assets/` — HIGH confidence (direct)
+  — wasm-pack output to `pkg/`, Vite output to `dist/`, `.wasm` file naming pattern
 
 ---
-*Pitfalls research for: v1.1 Polish & Feel milestone — CSS animations, Web Audio, localStorage, dark mode*
-*Researched: 2026-04-13*
+
+## Prior Version Reference
+
+The v1.1 PITFALLS.md (browser-side polish: CSS animations, Web Audio, localStorage, dark mode)
+is preserved for reference. That document is specific to browser-side JS/CSS concerns and does
+not overlap with this Docker deployment document.
+
+---
+*Pitfalls research for: v1.2 Docker multi-architecture deployment milestone*
+*Researched: 2026-04-14*

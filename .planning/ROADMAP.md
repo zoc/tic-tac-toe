@@ -29,6 +29,12 @@ See archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 </details>
 
+## v1.2 Docker Deployment (Phases 9-11)
+
+- [x] Phase 9: Docker & nginx (1/1 plans) — completed 2026-04-14
+- [x] Phase 10: GitHub Actions (1/1 plans) — completed 2026-04-14
+- [x] Phase 11: Docs (1/1 plans) — completed 2026-04-14
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -41,3 +47,6 @@ See archive: `.planning/milestones/v1.1-ROADMAP.md`
 | 6. Thinking Delay | v1.1 | 1/1 | Complete | 2026-04-13 |
 | 7. Sound Effects & Mute | v1.1 | 1/1 | Complete | 2026-04-13 |
 | 8. Animated Win Line | v1.1 | 1/1 | Complete | 2026-04-13 |
+| 9. Docker & nginx | v1.2 | 1/1 | Complete | 2026-04-14 |
+| 10. GitHub Actions | v1.2 | 1/1 | Complete | 2026-04-14 |
+| 11. Docs | v1.2 | 1/1 | Complete | 2026-04-14 |

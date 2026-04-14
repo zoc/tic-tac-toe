@@ -1,0 +1,40 @@
+# Rust build artifacts — can be gigabytes, never needed inside Docker
+target/
+
+# wasm-pack output — rebuilt fresh inside Docker
+pkg/
+
+# Vite production output — rebuilt fresh inside Docker
+dist/
+
+# Node.js dependencies — installed fresh via npm ci inside Docker
+node_modules/
+
+# Git history — not needed for build
+.git/
+.gitignore
+.gitattributes
+
+# GitHub Actions workflows — not needed inside the image
+.github/
+
+# Planning and documentation — not part of the application
+.planning/
+AGENTS.md
+README.md
+
+# Development/test files
+test.html
+*.log
+*.md
+
+# Editor and OS artifacts
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Docker files themselves — not needed inside the image
+Dockerfile
+.dockerignore

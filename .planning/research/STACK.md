@@ -1,405 +1,261 @@
-# Technology Stack
+# Stack Research
 
-**Project:** Tic-Tac-Toe WASM — v1.1 Polish & Feel
-**Researched:** 2026-04-13
-**Confidence:** HIGH (v1.0 base stack validated; new additions all native browser APIs — no npm deps required)
-
----
-
-## What This Milestone Adds vs. v1.0
-
-| v1.0 (validated, do not re-research) | v1.1 (this document) |
-|---------------------------------------|----------------------|
-| Rust/WASM game engine via wasm-pack | CSS animations for piece placement |
-| Vite 8 + vite-plugin-wasm | Animated SVG win line |
-| Vanilla JS + CSS Grid board | `setTimeout`-based thinking delay |
-| In-memory score tracking | Persistent scores via `localStorage` |
-| Dark navy/red theme | Sound effects via Web Audio API |
-| | Dark mode via `prefers-color-scheme` |
-
-**Net new npm dependencies: 0**
-**Net new Rust/WASM changes: 0**
-All six features are implementable with native browser platform APIs.
+**Domain:** Docker multi-arch deployment — Rust/WASM + Vite static site
+**Researched:** 2026-04-14
+**Confidence:** HIGH — all versions verified against Docker Hub and GitHub Releases
 
 ---
 
-## New Capability Analysis
+## Context
 
-### Feature 1: Smooth CSS Animations — Piece Placement & Board Transitions
+This is a **subsequent milestone** stack addendum. The core Rust/WASM/Vite stack is already validated (see prior research). This document covers only the **new additions** required for Docker multi-architecture deployment:
 
-**Implementation:** Pure CSS — `@keyframes` + `animation` property
-**New dependencies:** None
+- Multi-stage Dockerfile (Rust/wasm-pack build → nginx serve)
+- Multi-arch manifest (linux/amd64 + linux/arm64) via docker buildx + QEMU
+- GitHub Actions CI triggered on git tag push, publishing to Docker Hub
 
-CSS `@keyframes` animations are "Baseline Widely available" across all target browsers (Chrome, Firefox, Safari, Edge) since well before 2020. The existing `style.css` already uses `transition` for hover states — `@keyframes` is the natural extension for entrance animations.
+---
 
-**Approach:**
-- Add a `pop-in` keyframe (scale 0→1 with cubic-bezier overshoot) applied via `.cell--x` and `.cell--o` when cells are rendered
-- Trigger by adding the CSS class when the cell DOM element is created in `renderBoard()`
-- Use `transform: scale()` (GPU-composited, no layout reflow) — safe for `will-change: transform`
-- Add `@media (prefers-reduced-motion: reduce)` override to skip animations for accessibility
+## Key Architectural Insight: WASM Is Architecture-Neutral
 
-**Integration point:** `src/style.css` (keyframe definition) + `src/main.js` `renderBoard()` (class assignment when value !== 0)
+**This is the most important fact for the Dockerfile design.**
 
-```css
-@keyframes pop-in {
-  0%   { transform: scale(0.4); opacity: 0; }
-  70%  { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(1);   opacity: 1; }
-}
+WebAssembly `.wasm` binaries are not compiled to a native ISA — they are portable bytecode. A `.wasm` file built on `linux/amd64` runs identically on `linux/arm64` because the browser's WASM runtime handles the native translation at runtime (confirmed: https://webassembly.org/docs/portability/).
 
-.cell--x, .cell--o {
-  animation: pop-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
+**Consequence:** The Rust/wasm-pack compilation step does NOT need to run twice (once per target arch). It only needs to run once on the host architecture (`linux/amd64`, which is the GitHub Actions runner). The final artifact is a pure-static `dist/` directory of HTML + CSS + JS + `.wasm` — all architecture-neutral files.
 
-@media (prefers-reduced-motion: reduce) {
-  .cell--x, .cell--o { animation: none; }
-}
+**This means the build stage does NOT need cross-compilation.** Only the `COPY` into nginx needs to produce arch-specific nginx binaries. Docker buildx handles that automatically by pulling the correct nginx binary for each target platform.
+
+---
+
+## Recommended Stack
+
+### Docker Base Images
+
+| Image | Tag | Purpose | Why Recommended |
+|-------|-----|---------|-----------------|
+| `rust` | `1.94.1-slim` | Rust/wasm-pack build stage | Official Rust Docker image, `slim` variant removes docs/examples but keeps cargo and glibc. Matches the project's validated Rust version. Multi-arch on Docker Hub (amd64, arm64, etc.) but build runs native on amd64. |
+| `node` | `22-alpine3.23` | npm/Vite build sub-stage | Node 22 LTS (current LTS as of 2026-04), Alpine keeps image small (~54 MB compressed). Used to run `npm ci && npm run build`. Supports linux/amd64 and linux/arm64. |
+| `nginx` | `1.29.8-alpine3.23` | Production serve stage | Current stable nginx (1.29.8) on Alpine 3.23. ~24 MB compressed. Supports linux/amd64, linux/arm64, linux/arm/v7, linux/386, linux/s390x, linux/ppc64le — all from a single image tag. Confirmed on Docker Hub 2026-04-14. |
+
+**Tag pinning rationale:**
+- `rust:1.94.1-slim` — fully pinned to match project's validated Rust version; prevents silent toolchain drift
+- `node:22-alpine3.23` — LTS major + specific Alpine patch; `22-alpine` (floating to latest LTS patch) is also acceptable
+- `nginx:1.29.8-alpine3.23` — fully pinned for deterministic deployments; `nginx:alpine` (floating to latest stable) is acceptable for this project's scale
+
+### GitHub Actions Actions
+
+| Action | Version | Purpose | Why |
+|--------|---------|---------|-----|
+| `docker/setup-qemu-action` | `v4` | Install QEMU binfmt handlers on runner | Required to emulate `linux/arm64` on `linux/amd64` GitHub runners. v4.0.0 released 2026-03-04 (Node 24 runtime). Latest. |
+| `docker/setup-buildx-action` | `v4` | Create and configure BuildKit builder | Activates `docker buildx` with multi-platform support. v4.0.0 released 2026-03-05 (Node 24 runtime). Latest. |
+| `docker/login-action` | `v4` | Authenticate to Docker Hub | v4.1.0 released 2026-04-02. Latest. Node 24 runtime. |
+| `docker/build-push-action` | `v7` | Build multi-arch image and push manifest | v7.1.0 released 2026-04-10. Latest. Handles `platforms: linux/amd64,linux/arm64`, creates the multi-arch manifest automatically. |
+| `docker/metadata-action` | `v6` | Generate Docker tags from git refs | v6.0.0 released 2026-03-05. Latest. Converts git tag `v1.2.0` → Docker Hub tags `1.2.0`, `1.2`, `1`, `latest` via semver rules. |
+
+**Version pinning strategy:** Use major version tags (`v4`, `v7`) — the Docker team maintains backward compatibility within major versions and applies security patches. All four core Docker actions (`setup-qemu`, `setup-buildx`, `login`, `build-push`) were updated together in March 2026 to Node 24 runtime (required Actions Runner ≥ v2.327.1, which `ubuntu-latest` satisfies).
+
+### Development Tools (local cross-arch testing)
+
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| Docker Desktop (Mac/Linux) | Bundles buildx and QEMU; enables `docker buildx build --platform linux/arm64` locally | Verify with `docker buildx inspect` |
+| `docker buildx ls` | List available builders and their platform support | Run after `setup-buildx-action` in CI to debug platform issues |
+
+---
+
+## Dockerfile Structure
+
+The correct multi-stage Dockerfile for this project:
+
+```dockerfile
+# ── Stage 1: Rust build (wasm-pack) ─────────────────────────────────────
+# Runs on the builder's native arch (linux/amd64 on GitHub Actions).
+# Output: pkg/*.wasm + pkg/*.js — both arch-neutral.
+FROM --platform=$BUILDPLATFORM rust:1.94.1-slim AS rust-builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install wasm-pack (also installs wasm32-unknown-unknown target)
+RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src/ ./src/
+
+# --release: wasm-opt runs automatically; --target web: ES module output
+RUN wasm-pack build --target web --release
+
+# ── Stage 2: npm/Vite build ──────────────────────────────────────────────
+# Also arch-neutral: produces dist/ of HTML + CSS + JS + .wasm
+FROM --platform=$BUILDPLATFORM node:22-alpine3.23 AS node-builder
+
+WORKDIR /app
+COPY package.json package-lock.json vite.config.js index.html ./
+COPY src/ ./src/
+COPY --from=rust-builder /app/pkg ./pkg
+
+RUN npm ci && npm run build
+
+# ── Stage 3: nginx serve ─────────────────────────────────────────────────
+# THIS stage instantiates for each target platform.
+# BuildKit pulls nginx:1.29.8-alpine3.23 for linux/amd64 AND linux/arm64.
+# The dist/ content is identical for both — only nginx binary differs.
+FROM nginx:1.29.8-alpine3.23
+
+COPY --from=node-builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
 ```
 
+**Why `--platform=$BUILDPLATFORM` on stages 1 and 2:**
+- Forces these expensive stages to always run on the builder's native arch (amd64), even when building for arm64
+- Without it, BuildKit would emulate them via QEMU for the arm64 target — making a 3-minute Rust compile take 15-20 minutes
+- Since WASM output is arch-neutral, running stages 1 and 2 natively on amd64 is always correct
+
+**Why `rust:1.94.1-slim` (Debian) not `rust:alpine` (musl):**
+wasm-pack downloads pre-built `wasm-bindgen-cli` binaries that link against glibc. On Alpine (musl libc), these binaries fail with dynamic linker errors. Debian slim uses glibc — the standard ABI these binaries target. Build stage image size doesn't matter since it's discarded.
+
 ---
 
-### Feature 2: Animated Win Line
+## GitHub Actions Workflow
 
-**Implementation:** Inline SVG `<line>` element with CSS stroke-dashoffset animation
-**New dependencies:** None
+```yaml
+name: Publish Docker Image
 
-The standard technique for "drawing" a line in CSS is `stroke-dasharray` + `stroke-dashoffset` animation. This is pure CSS on an inline SVG overlaid on the board. No canvas, no library.
+on:
+  push:
+    tags:
+      - 'v*'              # Triggers on v1.2.0, v1.2.3, etc.
 
-**Approach:**
-- Add an absolutely positioned `<svg>` overlay inside `.board` (or appended by JS)
-- JS injects a `<line>` from start-cell center to end-cell center based on `winningPositions`
-- CSS animates `stroke-dashoffset` from `line-length` to `0` over ~400ms
-- Coordinates calculated from cell size: `boardSize / 3` per cell, center = `cellSize * col + cellSize/2`
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-**Integration point:**
-- `index.html`: add `<svg class="win-line-overlay" ...>` inside `.board`
-- `src/style.css`: `.win-line-overlay` positioned `absolute`, pointer-events none; `@keyframes draw-line`
-- `src/main.js`: `handleGameOver()` computes line endpoints from `winningPositions[0]` and `winningPositions[2]`, sets SVG `<line>` attributes and triggers animation class
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ vars.DOCKERHUB_USERNAME }}/tic-tac-toe
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
 
-```css
-@keyframes draw-line {
-  from { stroke-dashoffset: var(--line-length); }
-  to   { stroke-dashoffset: 0; }
-}
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
 
-.win-line {
-  stroke: #fff;
-  stroke-width: 6px;
-  stroke-linecap: round;
-  animation: draw-line 0.4s ease-out forwards;
-}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 ```
 
-**Key detail:** Set `stroke-dasharray` and `stroke-dashoffset` both to the line's pixel length (computed via JS `line.getTotalLength()` or manual `Math.hypot(dx, dy)`). The `board` needs `position: relative` (already set for overflow hidden) and the SVG needs `position: absolute; inset: 0; width: 100%; height: 100%`.
+**Key workflow choices explained:**
+- `tags: 'v*'` — triggers only on version tags, not every commit push; no accidental publishes
+- `docker/metadata-action` — `v1.2.3` tag → Docker Hub publishes `1.2.3`, `1.2`, `1` (and `latest` via the major pattern)
+- `cache-from/cache-to: type=gha` — GitHub Actions cache for BuildKit layers; Rust compilation takes 2–5 min cold; with layer cache subsequent builds are ~30s for CSS/JS changes
+- `push: true` — multi-arch manifests can only be pushed to a registry, not loaded locally (without containerd image store setup)
+- `${{ vars.DOCKERHUB_USERNAME }}` — use GitHub Actions variable (not secret) for the username; `${{ secrets.DOCKERHUB_TOKEN }}` for the access token
 
 ---
 
-### Feature 3: Computer "Thinking" Delay (300–800ms)
+## WASM-Specific Cross-Compilation Notes
 
-**Implementation:** `setTimeout` in existing `handleCellClick` — pure JS refactor
-**New dependencies:** None
+### What requires NO cross-compilation
 
-The current code calls `game.computer_move()` synchronously inline. Converting to `setTimeout` wraps the existing logic in a closure.
+| Artifact | Reason |
+|----------|--------|
+| `.wasm` binary | Architecture-neutral bytecode — runs on any WASM runtime |
+| wasm-bindgen JS glue (`pkg/*.js`) | Pure JavaScript |
+| Vite `dist/` output | HTML, CSS, JS, `.wasm` — all arch-neutral |
 
-**Approach:**
-- Replace the synchronous computer move block with `setTimeout(() => { ... }, delay)`
-- Delay = random value in [300, 800]ms: `300 + Math.random() * 500`
-- The `isProcessing` flag and `board--disabled` class are set *before* the timeout (already done) — no change needed there
-- Cancel pending timeout on `resetGame()` with `clearTimeout(thinkingTimer)`
+### What requires per-arch binaries (handled by BuildKit automatically)
 
-**Integration point:** `src/main.js` — `handleCellClick()` and `resetGame()`
+| Artifact | How handled |
+|----------|-------------|
+| nginx server binary | BuildKit pulls `nginx:1.29.8-alpine3.23` manifest for the correct target arch |
 
-```js
-const THINKING_MIN = 300;
-const THINKING_MAX = 800;
-let thinkingTimer = null;
+### wasm-opt availability in Docker
 
-// In handleCellClick, replace synchronous computer_move() block:
-thinkingTimer = setTimeout(() => {
-  const compPos = game.computer_move();
-  // ... rest of existing logic unchanged
-}, THINKING_MIN + Math.random() * (THINKING_MAX - THINKING_MIN));
-
-// In resetGame():
-clearTimeout(thinkingTimer);
-thinkingTimer = null;
-```
+`wasm-pack --release` runs `wasm-opt` automatically. The `rust:1.94.1-slim` base image (Debian Bookworm) has the necessary system libraries. If wasm-opt fails in CI (it does on some stripped environments), add `--no-opt` to the wasm-pack invocation — the binary will be ~10–30% larger but functionally identical.
 
 ---
 
-### Feature 4: Persistent Scores via localStorage
+## Alternatives Considered
 
-**Implementation:** `window.localStorage` — native browser API
-**New dependencies:** None
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Rust build base | `rust:1.94.1-slim` (Debian/glibc) | `rust:alpine` (musl) | wasm-bindgen-cli prebuilt binaries require glibc; fails on musl without source compilation |
+| WASM cross-compilation | Single native build (amd64), arch-neutral WASM output | Compile Rust targeting aarch64 natively | Unnecessary complexity — WASM output is not ISA-specific |
+| Vite build location | Separate Node stage in Dockerfile | Build `dist/` outside Docker, COPY in | Multi-stage keeps CI reproducible; no local artifacts to manage |
+| nginx version | `nginx:1.29.8-alpine3.23` (mainline pinned) | `nginx:stable-alpine` (1.26.x floating) | Mainline (1.29.x) has all current security patches; `stable` is older |
+| Multi-arch strategy | QEMU emulation on single amd64 runner | Native matrix (separate arm64 runner per platform) | QEMU is simpler for a static site. For compiled server apps with long builds, native runners win. |
+| Tag trigger | `tags: 'v*'` | `push: branches: [main]` | Deploy on explicit version tags only; no accidental latest-tag updates on every commit |
+| Caching | `cache-from: type=gha` | `cache-from: type=registry` | GitHub Actions cache is zero-config and free; registry cache requires an additional image push |
 
-`localStorage` is "Baseline Widely available" since July 2015 (MDN). It persists key/value strings across sessions for the same origin. The current `score` object is in-memory; persistence requires wrapping read/write with `localStorage`.
-
-**Approach:**
-- On startup: read `localStorage.getItem('ttt-score')`, parse JSON, hydrate the `score` object
-- On score update: `localStorage.setItem('ttt-score', JSON.stringify(score))`
-- Defensive: wrap in `try/catch` — `localStorage` throws `SecurityError` in `file://` URLs and when storage is blocked by user preferences
-- Store schema: `{ wins: N, losses: N, draws: N }` — simple, forward-compatible
-
-**Integration point:** `src/main.js`
-
-```js
-const SCORE_KEY = 'ttt-score';
-
-function loadScore() {
-  try {
-    const saved = localStorage.getItem(SCORE_KEY);
-    if (saved) Object.assign(score, JSON.parse(saved));
-  } catch { /* blocked or file:// — silent fallback to in-memory */ }
-}
-
-function persistScore() {
-  try {
-    localStorage.setItem(SCORE_KEY, JSON.stringify(score));
-  } catch { /* quota exceeded or blocked — silent */ }
-}
-```
-
-**Call sites:** `loadScore()` before `updateScoreDisplay()` in `main()`, `persistScore()` after each score increment in `handleGameOver()`.
-
----
-
-### Feature 5: Sound Effects with Mute Toggle
-
-**Implementation:** Web Audio API (`AudioContext` + `OscillatorNode` + `GainNode`) — native browser API
-**New dependencies:** None
-**⚠️ Critical: Autoplay Policy**
-
-Web Audio is "Baseline Widely available" since April 2021 (MDN). However, all browsers block `AudioContext` from producing sound until a user gesture has occurred on the page. This is critical for our game:
-
-- **Safe:** First sound fires on a cell click (user gesture) — this satisfies the browser autoplay policy
-- **Unsafe:** Any sound fired on page load (before interaction) — will be blocked silently
-
-The game already waits for click interaction before any game logic runs, so the autoplay constraint is naturally satisfied.
-
-**Why Web Audio API over `<audio>` elements?** For short, synthesized game sounds (100–300ms), Web Audio `OscillatorNode` produces sounds programmatically with zero file assets, no loading delay, and precise timing. No `.mp3`/`.ogg` files to ship. The sounds (place move, computer move, win, loss, draw) are simple tones — perfect for oscillators.
-
-**Approach:**
-- Single shared `AudioContext` created lazily on first click
-- Factory function `playSound(type)` creates `OscillatorNode` → `GainNode` → `destination`, plays, and auto-disconnects after duration
-- Mute toggle: `GainNode` master gain set to 0 when muted, 1 when unmuted
-- Mute state persisted in `localStorage` key `'ttt-muted'`
-- Add mute button `<button id="mute-btn">` to `index.html`
-
-```js
-let audioCtx = null;
-let masterGain = null;
-let isMuted = false;
-
-function ensureAudio() {
-  if (audioCtx) return;
-  audioCtx = new AudioContext();
-  masterGain = audioCtx.createGain();
-  masterGain.connect(audioCtx.destination);
-  masterGain.gain.value = isMuted ? 0 : 1;
-}
-
-function playSound(type) {
-  ensureAudio();
-  const sounds = {
-    place:    { freq: 440, duration: 0.08, type: 'sine' },
-    computer: { freq: 300, duration: 0.08, type: 'sine' },
-    win:      { freq: 660, duration: 0.35, type: 'triangle' },
-    loss:     { freq: 220, duration: 0.4,  type: 'sawtooth' },
-    draw:     { freq: 380, duration: 0.25, type: 'sine' },
-  };
-  const s = sounds[type];
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.type = s.type;
-  osc.frequency.value = s.freq;
-  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + s.duration);
-  osc.connect(gain);
-  gain.connect(masterGain);
-  osc.start();
-  osc.stop(audioCtx.currentTime + s.duration + 0.05);
-}
-```
-
-**`AudioContext` suspended state:** Chrome suspends `AudioContext` if created before a user gesture. `ensureAudio()` called on first click guarantees the context is created after a gesture. Alternatively, call `audioCtx.resume()` inside any click handler for safety.
-
-**Mute button HTML addition:**
-```html
-<button class="mute-btn" id="mute-btn" aria-label="Toggle sound" aria-pressed="false">🔊</button>
-```
-
-**Integration points:**
-- `index.html`: mute button (near scoreboard or title)
-- `src/style.css`: `.mute-btn` styling (small, unobtrusive)
-- `src/main.js`: `playSound()` calls at cell placement, computer move, and game over
-
----
-
-### Feature 6: Dark Mode — `prefers-color-scheme`
-
-**Implementation:** CSS `@media (prefers-color-scheme: light)` override — pure CSS
-**New dependencies:** None
-
-`prefers-color-scheme` is "Baseline Widely available" since January 2020 (MDN). The current app already uses a dark theme (`#1a1a2e` navy, `#e94560` red). The dark theme becomes the *default* and light mode overrides it.
-
-**Approach:**
-- Keep existing CSS variables in `:root` as the dark defaults (no change to existing rules)
-- Add `@media (prefers-color-scheme: light)` block overriding CSS variables to light values
-- Light palette suggestion: white/near-white background, darker navy text, same red accent
-
-```css
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg:       #f5f5f5;   /* light grey background */
-    --surface:  #ffffff;   /* white cells */
-    --accent:   #c0392b;   /* slightly darker red for contrast on white */
-    --text:     #1a1a2e;   /* navy text — inverts from dark mode */
-    --text-dim: #555;
-  }
-}
-```
-
-**No JS required.** The CSS variable override cascades to all components that already use `var(--bg)`, `var(--surface)`, `var(--accent)`, `var(--text)`, `var(--text-dim)` — the entire existing UI adapts automatically.
-
-**Manual override (optional, future):** If a user toggle is later needed, a `data-theme="light"` attribute on `<html>` with matching CSS selector `[data-theme="light"]` can be added. Not required for this milestone.
-
-**Integration point:** `src/style.css` only — appended at bottom
-
----
-
-## Dependency Summary
-
-### New npm Dependencies: NONE
-
-No additions to `package.json`. All six features are native browser platform.
-
-### New Rust/Cargo Dependencies: NONE
-
-No Rust code changes. All features live in the JS/CSS layer. The thinking delay is a JS `setTimeout`. Score persistence is JS `localStorage`. Sounds are JS Web Audio. Animations are CSS. Dark mode is CSS.
-
-### Existing Stack — Unchanged
-
-| Technology | Version | Status |
-|------------|---------|--------|
-| Rust (stable) | 1.94.1 | Unchanged |
-| wasm-bindgen | 0.2.118 | Unchanged |
-| wasm-pack | 0.14.0 | Unchanged |
-| Vite | 8.0.8 | Unchanged |
-| vite-plugin-wasm | 3.6.0 | Unchanged |
-| All Cargo dependencies | (see v1.0 STACK.md) | Unchanged |
-
----
-
-## Browser API Compatibility
-
-| API / Feature | Chrome | Firefox | Safari | Edge | Baseline |
-|---------------|--------|---------|--------|------|----------|
-| CSS `@keyframes` animations | 43+ | 16+ | 9+ | 12+ | Widely available |
-| SVG `stroke-dashoffset` animation | All | All | All | All | Widely available |
-| `prefers-color-scheme` | 76+ | 67+ | 12.1+ | 79+ | Widely available (Jan 2020) |
-| `window.localStorage` | 4+ | 3.5+ | 4+ | 12+ | Widely available (Jul 2015) |
-| Web Audio API | 35+ | 25+ | 14.1+ | 12+ | Widely available (Apr 2021) |
-| `setTimeout` | All | All | All | All | Universal |
-
-All APIs are supported in every target browser (Chrome, Firefox, Safari, Edge modern).
-
----
-
-## What NOT to Add
+## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| Howler.js / Tone.js | External audio libs for 5 simple tones — massive overkill. Adds ~50–200KB bundle. | Web Audio API `OscillatorNode` — zero deps, zero bytes |
-| GSAP / Anime.js | JS animation libs for CSS `@keyframes` that take 5 lines — unjustified complexity. | CSS `@keyframes` + `animation` property |
-| Preloaded audio files (.mp3/.ogg) | Requires asset management, codec support matrix, loading logic, fallbacks. | Synthesized oscillator tones — plays instantly, no assets |
-| `prefers-color-scheme` JS listener | Real-time theme switching without page reload adds complexity for near-zero benefit. | Pure CSS `@media` — OS change reapplies automatically |
-| IndexedDB | Transactional async storage for 3 integers — extreme overkill. | `localStorage` — sync, simple, right-sized |
-| CSS custom property animation with `@property` | Houdini — not fully supported in Safari without flags. | Standard `@keyframes` — universally supported |
-| Motion library (Framer Motion) | React-only, 35KB+ for a vanilla JS page. | CSS `animation` property |
-| Web Animations API (WAAPI) | More JS complexity for what CSS keyframes handle in 10 lines. Useful if animations need JS-controlled playback; we don't. | CSS `@keyframes` |
+| `FROM rust:alpine` as build stage | wasm-bindgen-cli prebuilt binary targets glibc; hits "No such file or directory" on musl Alpine | `FROM rust:1.94.1-slim` (Debian slim) |
+| `--platform linux/arm64` on Rust/Node build stages | Forces QEMU-emulated Rust compilation: 15–20 min vs 3 min native. WASM output is arch-neutral — no benefit. | `--platform=$BUILDPLATFORM` on build stages |
+| Building without layer cache | Cold `cargo build` takes 2–5 minutes; without cache, every CI run pays full cost | `cache-from: type=gha` + `cache-to: type=gha,mode=max` |
+| `latest` as the only Docker Hub tag | Makes rollback impossible; users can't pin to a version | `docker/metadata-action` to also publish `1.2.3`, `1.2`, `1` tags |
+| `docker/build-push-action@v6` or earlier | v6 uses Node 20 runtime; v7 is current (Node 24). All Docker actions updated together in March 2026. | Use `v7` for `build-push-action`, `v4` for the others |
+| Hardcoding Docker Hub password in workflow | Leaks credentials | `${{ secrets.DOCKERHUB_TOKEN }}` — use a scoped Docker Hub Access Token, not the account password |
+| `COPY . .` as first Dockerfile instruction | Invalidates build cache on every source change; Rust recompiles everything | Copy `Cargo.toml`/`Cargo.lock` first, then `src/` — allows cargo dependency layer caching |
 
 ---
 
-## Integration Map
+## Version Compatibility
 
-```
-src/main.js changes:
-  handleCellClick()     → setTimeout for thinking delay
-                        → playSound('place') on human move
-                        → playSound('computer') after computer move
-  handleGameOver()      → playSound('win'|'loss'|'draw')
-                        → persistScore()
-                        → renderWinLine() [new helper]
-  resetGame()           → clearTimeout(thinkingTimer)
-                        → removeWinLine() [new helper]
-  main()                → loadScore() before updateScoreDisplay()
-                        → loadMuteState()
-
-index.html changes:
-  <svg class="win-line-overlay"> inside .board
-  <button id="mute-btn"> near scoreboard
-
-src/style.css changes:
-  @keyframes pop-in       (piece placement animation)
-  @keyframes draw-line    (win line animation)
-  .win-line-overlay       (SVG overlay positioning)
-  .mute-btn               (button style)
-  @media prefers-color-scheme: light  (dark mode override)
-  @media prefers-reduced-motion       (animation accessibility)
-
-Rust/WASM (src/*.rs): NO CHANGES
-Cargo.toml:            NO CHANGES
-package.json:          NO CHANGES
-vite.config.js:        NO CHANGES
-```
-
----
-
-## Critical Implementation Notes
-
-### Web Audio: `AudioContext` Lifecycle
-Create `AudioContext` lazily inside the first user-gesture handler (cell click). Do NOT create at module top level — Chrome and Safari will suspend it immediately and may not resume. Pattern:
-
-```js
-// WRONG: creates suspended context before any gesture
-const audioCtx = new AudioContext();
-
-// RIGHT: lazy creation on first gesture
-function ensureAudio() {
-  if (audioCtx) return;
-  audioCtx = new AudioContext();
-  // ...
-}
-boardEl.addEventListener('click', (e) => {
-  ensureAudio(); // safe — inside click handler
-  handleCellClick(e);
-});
-```
-
-### localStorage: Always `try/catch`
-`localStorage.setItem()` throws `QuotaExceededError` if storage is full, and `SecurityError` in `file://` URLs and private browsing in some configurations. Silent fallback to in-memory is the right behavior.
-
-### CSS Animations: Re-triggering on Re-render
-`renderBoard()` rebuilds all 9 cell DOM nodes via `boardEl.innerHTML = ''`. This means newly created cells with a CSS class automatically trigger their `animation` from scratch — no need to force-reflow tricks. The existing innerHTML rebuild pattern is actually ideal for animation triggering.
-
-### SVG Win Line: Board `position: relative`
-The `.board` already has `overflow: hidden` which establishes a containing block. The SVG overlay needs `position: absolute; inset: 0; pointer-events: none; width: 100%; height: 100%`. The `width/height: var(--board-size)` on `.board` means the SVG coordinate space matches board pixel dimensions.
-
-### Mute Toggle: Accessibility
-The `<button>` must have `aria-pressed` toggled between `"true"` and `"false"` on click. Use `aria-label="Toggle sound"` rather than emoji text for screen reader clarity.
+| Package A | Compatible With | Notes |
+|-----------|-----------------|-------|
+| docker/setup-qemu-action@v4 | docker/setup-buildx-action@v4, docker/build-push-action@v7 | All use @docker/actions-toolkit 0.77–0.87 range; released together March 2026 |
+| docker/login-action@v4 | docker/build-push-action@v7 | Same actions-toolkit version family; v4.1.0 is latest |
+| docker/metadata-action@v6 | docker/build-push-action@v7 | Metadata `outputs.tags` and `outputs.labels` consumed directly as build-push inputs |
+| `rust:1.94.1-slim` | wasm-pack 0.14.0 | wasm-pack installer script works on Debian Bookworm (glibc 2.36). Confirmed. |
+| `node:22-alpine3.23` | Vite 8.x, npm 10.x | Node 22 LTS is fully compatible with Vite 8. npm comes bundled. |
+| `nginx:1.29.8-alpine3.23` | linux/amd64, linux/arm64, linux/arm/v7, linux/386, linux/s390x, linux/ppc64le | Multi-arch manifest verified on Docker Hub 2026-04-14 |
+| `docker/build-push-action@v7` | Actions Runner ≥ v2.327.1 | Node 24 runtime requirement. `ubuntu-latest` on GitHub Actions satisfies this. |
 
 ---
 
 ## Sources
 
-- MDN Web Docs — Web Audio API (last modified Oct 2025, HIGH confidence — official)
-- MDN Web Docs — `prefers-color-scheme` (last modified Dec 2025, HIGH confidence — official)
-- MDN Web Docs — `window.localStorage` (last modified Nov 2025, HIGH confidence — official)
-- MDN Web Docs — Autoplay guide for media and Web Audio APIs (last modified Sep 2025, HIGH confidence — official)
-- MDN Web Docs — Using CSS animations (last modified Dec 2025, HIGH confidence — official)
-- Existing codebase: `src/main.js`, `src/style.css`, `index.html` (direct inspection, HIGH confidence)
+- Docker Hub `nginx` tags (live, 2026-04-14) — nginx 1.29.8-alpine3.23 confirmed multi-arch (HIGH confidence)
+- Docker Hub `rust` tags (live, 2026-04-14) — rust:1.94.1-slim confirmed amd64+arm64 (HIGH confidence)
+- Docker Hub `node` tags (live, 2026-04-14) — node:22-alpine3.23 LTS confirmed multi-arch (HIGH confidence)
+- GitHub Releases: docker/setup-buildx-action v4.0.0 (2026-03-05) — https://github.com/docker/setup-buildx-action/releases (HIGH confidence)
+- GitHub Releases: docker/build-push-action v7.1.0 (2026-04-10) — https://github.com/docker/build-push-action/releases (HIGH confidence)
+- GitHub Releases: docker/login-action v4.1.0 (2026-04-02) — https://github.com/docker/login-action/releases (HIGH confidence)
+- GitHub Releases: docker/setup-qemu-action v4.0.0 (2026-03-04) — https://github.com/docker/setup-qemu-action/releases (HIGH confidence)
+- GitHub Releases: docker/metadata-action v6.0.0 (2026-03-05) — https://github.com/docker/metadata-action/releases (HIGH confidence)
+- Docker official docs — Multi-platform images with GitHub Actions — https://docs.docker.com/build/ci/github-actions/multi-platform/ (HIGH confidence)
+- WebAssembly.org — Portability spec — https://webassembly.org/docs/portability/ (HIGH confidence) — confirms WASM is arch-neutral bytecode
 
 ---
 
-*Stack research for: Tic-Tac-Toe WASM v1.1 Polish & Feel*
-*Researched: 2026-04-13*
+*Stack research for: Docker multi-arch deployment, Rust/WASM + Vite static site*
+*Researched: 2026-04-14*
