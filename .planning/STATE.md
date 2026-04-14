@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Polish & Feel
-status: complete
-stopped_at: Milestone v1.1 archived
+milestone: v1.2
+milestone_name: Docker Deployment
+status: planning
+stopped_at: Defining requirements
 last_updated: "2026-04-14T00:00:00.000Z"
-last_activity: 2026-04-14 -- Milestone v1.1 complete and archived
+last_activity: 2026-04-14 -- Milestone v1.2 started
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 5
-  completed_plans: 5
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,25 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
-**Current focus:** Planning next milestone (v1.1 complete — all 8 phases shipped)
+**Current focus:** Milestone v1.2 Docker Deployment — defining requirements
 
 ## Current Position
 
-Milestone v1.1 Polish & Feel — COMPLETE ✅
-
-All 5 v1.1 phases (4-8) complete. All 16/16 requirements delivered. Game is fully polished.
-
-Progress: [██████████] 100% (5/5 phases complete)
-
-## Phase Queue
-
-| Phase | Name | Status |
-|-------|------|--------|
-| ✅ 4 | CSS Foundation & Persistence | Complete |
-| ✅ 5 | CSS Piece Animations | Complete |
-| ✅ 6 | Thinking Delay | Complete |
-| ✅ 7 | Sound Effects & Mute | Complete |
-| ✅ 8 | Animated Win Line | Complete |
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-14 — Milestone v1.2 started
 
 ## Accumulated Context
 
@@ -62,9 +51,4 @@ None.
 
 ### Blockers/Concerns
 
-None — milestone v1.1 complete, all requirements shipped.
-
-## Session Continuity
-
-Last session: 2026-04-14
-Stopped at: Milestone v1.1 archived. Run `/gsd-new-milestone` to start next milestone.
+None.

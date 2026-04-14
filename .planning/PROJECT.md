@@ -36,9 +36,22 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] Mute toggle button with localStorage persistence — Validated in Phase 7: Sound Effects & Mute — v1.1
 - [x] Animated win line through all 8 winning orientations — Validated in Phase 8: Animated Win Line — v1.1
 
+## Current Milestone: v1.2 Docker Deployment
+
+**Goal:** Package the game as a multi-architecture Docker image served by nginx and publish it to Docker Hub via GitHub Actions.
+
+**Target features:**
+- Multi-stage Dockerfile (Rust/wasm-pack build → nginx:alpine serve)
+- Multi-arch manifest (linux/amd64 + linux/arm64) via docker buildx
+- GitHub Actions CI triggered on git tag push, publishing to Docker Hub
+- Usage documentation (run locally + deploy on a server)
+
 ### Active
 
-(None — all requirements shipped as of v1.1)
+- [ ] Multi-stage Dockerfile with Rust/wasm-pack build stage and nginx:alpine serve stage
+- [ ] GitHub Actions workflow building linux/amd64 + linux/arm64 on git tag push
+- [ ] Public Docker Hub image (multi-arch manifest)
+- [ ] README / usage docs for running and deploying the container
 
 ### Out of Scope
 
@@ -138,4 +151,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 — v1.1 Polish & Feel milestone complete*
+*Last updated: 2026-04-14 — v1.2 Docker Deployment milestone started*
