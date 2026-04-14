@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished web frontend featuring smooth CSS animations, synthesized sound effects, system dark mode support, score persistence, and an animated win line. The computer is beatable — it plays well but makes occasional mistakes.
+A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished web frontend featuring smooth CSS animations, synthesized sound effects, system dark mode support, score persistence, and an animated win line. The computer is beatable — it plays well but makes occasional mistakes. The game ships as a minimal Docker image (25.9MB) served by nginx with correct WASM MIME types, cache headers, gzip, and a health endpoint.
 
 ## Core Value
 
@@ -35,23 +35,21 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] Synthesized sound effects for all game events (human move, computer move, win, loss, draw) — Validated in Phase 7: Sound Effects & Mute — v1.1
 - [x] Mute toggle button with localStorage persistence — Validated in Phase 7: Sound Effects & Mute — v1.1
 - [x] Animated win line through all 8 winning orientations — Validated in Phase 8: Animated Win Line — v1.1
+- [x] Multi-stage Dockerfile (Rust/wasm-pack build stage → nginx:alpine serve stage, 25.9MB image) — Validated in Phase 9: Docker Image & nginx — v1.2
+- [x] nginx serves WASM with correct `Content-Type: application/wasm`, assets with `Cache-Control: immutable`, index.html with `no-cache` — Validated in Phase 9: Docker Image & nginx — v1.2
+- [x] gzip compression for HTML, CSS, JS (WASM excluded — pre-optimized by wasm-opt) — Validated in Phase 9: Docker Image & nginx — v1.2
+- [x] HEALTHCHECK on `/healthz` endpoint, port 80 exposed — Validated in Phase 9: Docker Image & nginx — v1.2
+- [x] `.dockerignore` excludes `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/` — Validated in Phase 9: Docker Image & nginx — v1.2
+- [x] README Quick Start with copy-pasteable `docker build` + `docker run` one-liner — Validated in Phase 10: Documentation — v1.2
+- [x] README nginx reverse proxy deployment section for VPS — Validated in Phase 10: Documentation — v1.2
 
-## Current Milestone: v1.2 Docker Deployment
+## Active Requirements (Next Milestone)
 
-**Goal:** Package the game as a multi-architecture Docker image served by nginx and publish it to Docker Hub via GitHub Actions.
-
-**Target features:**
-- Multi-stage Dockerfile (Rust/wasm-pack build → nginx:alpine serve)
-- Multi-arch manifest (linux/amd64 + linux/arm64) via docker buildx
-- GitHub Actions CI triggered on git tag push, publishing to Docker Hub
-- Usage documentation (run locally + deploy on a server)
-
-### Active
-
-- [ ] Multi-stage Dockerfile with Rust/wasm-pack build stage and nginx:alpine serve stage
+Candidates for v1.3 (CI/CD & Distribution):
 - [ ] GitHub Actions workflow building linux/amd64 + linux/arm64 on git tag push
-- [ ] Public Docker Hub image (multi-arch manifest)
-- [x] README / usage docs for running and deploying the container — Validated in Phase 10: Documentation
+- [ ] Multi-arch manifest published to Docker Hub on release tag
+- [ ] Semver tags generated automatically from git tag (v1.2.0 → 1.2.0, 1.2, 1, latest)
+- [ ] OCI image labels attached via docker/metadata-action
 
 ### Out of Scope
 
@@ -79,6 +77,9 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - Web Audio OscillatorNode synthesizer — 5 game sounds, ~82 LOC, zero audio files
 - Lazy AudioContext singleton satisfies browser autoplay policy
 - Incremental DOM update pattern in `renderBoard()` — only newly placed pieces trigger pop-in animation
+- Docker: multi-stage image (Rust/Node build → nginx:alpine serve), 25.9MB final image
+- wasm-pack pinned via `cargo install wasm-pack@0.14.0 --locked`; Node 20 via NodeSource
+- nginx:alpine serves WASM with correct MIME type natively; gzip excludes WASM (pre-optimized)
 
 ## Constraints
 
@@ -103,15 +104,26 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 | clearTimeout pattern for thinking delay | AbortController is overkill for setTimeout cancellation | ✓ Validated Phase 6 — thinkingTimer variable, clearTimeout in resetGame() |
 | OscillatorNode synthesizer over audio files | Zero network requests, no asset loading latency, ~82 LOC | ✓ Validated Phase 7 — 5 distinct sounds, all human-approved |
 | Lazy AudioContext singleton | Chrome/Safari autoplay policy: context only in user gesture | ✓ Validated Phase 7 — no silent first click in any browser |
+| wasm-pack pinned via cargo install --locked | Eliminates curl\|sh supply-chain risk; reproducible builds | ✓ Validated Phase 9 — 0.14.0 pinned, no unversioned script fetching |
+| Node 20 via NodeSource setup_20.x | Debian bookworm apt default is Node 18; README promised Node 20+ | ✓ Validated Phase 9 — Node 20.20.2 confirmed in build |
+| gzip_types excludes application/wasm | WASM pre-optimized by wasm-opt; double-gzip adds CPU cost, negligible benefit | ✓ Validated Phase 9 — text assets gzipped, WASM served pre-compressed |
+| HEALTHCHECK on /healthz (not /) | Dedicated endpoint keeps health probe noise out of nginx access logs | ✓ Validated Phase 9 — HTTP 200 "ok", access_log off |
+| Plain docker build in Quick Start docs | No --platform/buildx prerequisites; works for any local machine | ✓ Validated Phase 10 — simplest copy-paste path for new users |
 
 ## Current State
 
-**Phase 10 complete** (2026-04-14). Documentation for v1.2 Docker Deployment milestone added:
-- `## Quick Start` in README with plain `docker build` + `docker run` two-command block (DOCS-01)
-- `### Deploy behind a reverse proxy` nginx snippet inside `## Docker` section (DOCS-02)
-- Username placeholder note at top of `## Docker` section
+**Milestone v1.2 complete** (2026-04-14). Production Docker image ships the game:
+- Multi-stage Dockerfile: Rust/Node build stage → nginx:alpine serve stage (25.9MB image)
+- wasm-pack 0.14.0 pinned via `cargo install --locked`; Node 20 via NodeSource
+- nginx: correct WASM MIME type, `Cache-Control: immutable` for assets, `no-cache` for index.html
+- gzip for HTML/CSS/JS (WASM excluded — pre-optimized), HEALTHCHECK on `/healthz`
+- README Quick Start (`docker build` + `docker run`) and nginx reverse proxy docs
+- 10 phases total, 11 plans complete, ~1,689 LOC game + Docker/nginx config
 
-Prior state — **Milestone v1.1 complete** (2026-04-13). Full polished tic-tac-toe in the browser:
+<details>
+<summary>v1.1 state (2026-04-13)</summary>
+
+Full polished tic-tac-toe in the browser:
 - CSS-only dark/light theming via `prefers-color-scheme`, no JS, no FOUC
 - localStorage score persistence with graceful incognito degradation
 - Pop-in piece animation (incremental DOM update, only new piece animates)
@@ -120,21 +132,6 @@ Prior state — **Milestone v1.1 complete** (2026-04-13). Full polished tic-tac-
 - Animated win line for all 8 orientations, `prefers-reduced-motion` aware
 - 8 phases total, 8 plans complete, 70 commits, 2 days (2026-04-12 → 2026-04-13)
 - ~1,689 total LOC (927 Rust + 762 JS/CSS)
-
-<details>
-<summary>v1.0 state (2026-04-13)</summary>
-
-Full playable tic-tac-toe in the browser:
-- Vite 8 dev server and production build
-- Dark navy/red UI, responsive CSS Grid board
-- WASM-powered AI (imperfect minimax, ~25% mistake rate)
-- Win highlighting, draw detection, game-over lockout
-- Score tracking (wins/losses/draws) across sessions
-- Restart button (no page refresh needed)
-- Keyboard navigation (tab + enter/space)
-- XSS-safe, hover-suppressed-when-disabled
-- 44 commits, 2 days (2026-04-12 → 2026-04-13)
-- ~1,373 total LOC (927 Rust + 446 HTML/CSS/JS)
 
 </details>
 
@@ -156,4 +153,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 — Phase 10 documentation complete; v1.2 Docker Deployment milestone docs done*
+*Last updated: 2026-04-14 after v1.2 milestone — Docker Deployment shipped*

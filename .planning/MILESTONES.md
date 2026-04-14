@@ -1,5 +1,19 @@
 # Milestones
 
+## v1.2 Docker Deployment (Shipped: 2026-04-14)
+
+**Phases completed:** 2 phases (9-10), 3 plans, ~42 commits, 2 days (2026-04-13 → 2026-04-14)
+
+**Key accomplishments:**
+
+- Production-ready multi-stage Dockerfile: Rust/Node build stage → nginx:alpine serve stage (25.9MB image), wasm-pack 0.14.0 pinned via `cargo install --locked`, Node 20 via NodeSource
+- All 5 ROADMAP success criteria passed on first build: correct WASM MIME type, `Cache-Control: immutable` for assets + `no-cache` for index.html, gzip for text assets, HEALTHCHECK on `/healthz`, port 80 exposed
+- README updated with copy-pasteable `docker build` + `docker run` Quick Start and nginx reverse proxy deployment section for VPS hosting
+
+**Archive:** `.planning/milestones/v1.2-ROADMAP.md` · `.planning/milestones/v1.2-REQUIREMENTS.md`
+
+---
+
 ## v1.1 Polish & Feel (Shipped: 2026-04-13)
 
 **Phases completed:** 5 phases (4-8), 5 plans, ~1,689 LOC, 25 commits, 1 day

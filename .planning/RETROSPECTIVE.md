@@ -148,6 +148,72 @@ All six polish features from v1.1 scope: CSS-only dark/light theming, localStora
 
 ---
 
+# Retrospective: Milestone v1.2
+
+**Shipped:** 2026-04-14
+**Duration:** 2 days (2026-04-13 → 2026-04-14)
+**Scope:** 2 phases (9-10), 3 plans, ~42 commits
+
+---
+
+## What Was Built
+
+A production-ready Docker image: multi-stage Dockerfile (Rust/Node build stage → nginx:alpine serve, 25.9MB), pinned wasm-pack + Node 20, correct WASM MIME type, cache headers (immutable for assets, no-cache for index.html), gzip for text assets, HEALTHCHECK on `/healthz`, and README Quick Start + nginx reverse proxy docs.
+
+---
+
+## What Went Well
+
+**All 5 success criteria passed on first build attempt.** No rework, no debugging cycle. The plan was specific enough that execution was mechanical. The verify-first pattern (define acceptance criteria before touching a line) paid off again.
+
+**Supply-chain hygiene was easy to do correctly.** `cargo install wasm-pack@0.14.0 --locked` instead of `curl | sh` takes 30 seconds to implement and eliminates a real risk. Same for NodeSource vs apt default — one extra line in the Dockerfile, clearly correct.
+
+**nginx:alpine handles WASM MIME natively.** No custom `types` block needed — the built-in `mime.types` maps `.wasm → application/wasm`. The verify step confirmed this rather than pre-adding configuration that wasn't needed.
+
+**WASM excluded from gzip is a good default.** `wasm-opt` pre-optimizes the binary; runtime gzip doubles the CPU for negligible decompression savings. This distinction (pre-compressed = don't re-compress) is worth knowing and documenting.
+
+---
+
+## What Could Have Gone Better
+
+**Phase plan had stale ROADMAP progress table.** Phase 10 showed `0/1` plans and "Not started" in the progress table even after a plan was created (minor, but cosmetic noise in the planning files).
+
+**Task count in gsd-tools was 0.** The CLI extracted "0 tasks" from SUMMARY.md because the tool looks for a `tasks` frontmatter field that the SUMMARY templates don't populate. Low impact but means the MILESTONES.md auto-entry had placeholder accomplishments.
+
+---
+
+## Surprises
+
+- nginx:alpine ships a comprehensive `mime.types` file including `application/wasm` — no custom mapping needed. This was a pleasant discovery during the verify step.
+- The Phase 9 Docker image was 25.9MB (content) / 92.1MB on disk including layers — smaller than expected for a Rust + Vite build pipeline.
+- Health check noise in nginx access logs is a real production concern, not a theoretical one — the dedicated `/healthz` pattern with `access_log off` is the right default.
+
+---
+
+## Decisions That Aged Well
+
+| Decision | Why It Held Up |
+|----------|---------------|
+| Pinned wasm-pack via --locked | Reproducible; no surprise upgrades on re-build |
+| HEALTHCHECK on /healthz (not /) | Clean access logs; easy to filter in production |
+| Plain docker build in Quick Start | Zero prerequisites; works on any developer machine |
+| gzip excludes WASM | Correct understanding of pre-optimization; no wasted CPU |
+
+---
+
+## What to Carry Forward
+
+- Define Docker build success criteria as numbered acceptance checks before writing any Dockerfile — makes verification scripted and unambiguous
+- Exclude WASM from gzip_types by default in any nginx config for wasm-based apps
+- `cargo install <package>@<version> --locked` is the correct pattern for pinning Rust CLI tools in CI/Docker — not `curl | sh`
+- nginx:alpine includes `application/wasm` in mime.types — no custom MIME block needed (verify before adding)
+
+---
+
+*Written: 2026-04-14*
+
+---
+
 ## Cross-Milestone Trends
 
 *Updated after each milestone. Patterns that persist across multiple milestones.*
@@ -158,13 +224,15 @@ All six polish features from v1.1 scope: CSS-only dark/light theming, localStora
 |-----------|--------|-------|-----|----------|---------|
 | v1.0 MVP | 3 | 3 | ~1,373 | 2 days | 44 |
 | v1.1 Polish & Feel | 5 | 5 | ~1,689 | 1 day | 25 |
+| v1.2 Docker Deployment | 2 | 3 | Docker/nginx config | 2 days | ~42 |
 
 ### What Consistently Works
 
-- Bottom-up phased approach (logic → bridge → UI) keeps each phase independently testable
+- Bottom-up phased approach (logic → bridge → UI → packaging) keeps each phase independently testable
 - Code review after UI phases consistently finds XSS, a11y, and hover-state bugs
 - Verify-first plan structure: static grep checks + human browser approval catches pre-implementation without wasted re-work
 - Pre-implementing polish features alongside core features reduces later phase cost dramatically
+- Defining numbered acceptance criteria before writing implementation makes verification scripted and unambiguous
 
 ### Watch Out For
 
@@ -172,3 +240,4 @@ All six polish features from v1.1 scope: CSS-only dark/light theming, localStora
 - Vite 8+: use `build.target: 'esnext'` instead of `vite-plugin-top-level-await`
 - Requirements traceability: mark requirements Complete during phase execution, not after milestone archival
 - Web Audio: always use lazy AudioContext (created on first user gesture) — required for Safari/incognito autoplay policy
+- Docker: exclude WASM from gzip_types (pre-optimized by wasm-opt); use `cargo install --locked` for tool pinning in Dockerfiles
