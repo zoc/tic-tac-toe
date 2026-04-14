@@ -1,135 +1,171 @@
 # Project Research Summary
 
-**Project:** Tic-Tac-Toe WASM — v1.1 Polish & Feel
-**Domain:** Browser casual game polish (animations, audio, persistence, theming)
-**Researched:** 2026-04-13
-**Confidence:** HIGH
+**Project:** Tic-Tac-Toe WASM — v1.2 Docker Deployment
+**Domain:** Docker multi-architecture deployment — Rust/WASM + Vite static site containerization
+**Researched:** 2026-04-14
+**Confidence:** HIGH — all sources are official Docker/nginx/GitHub Actions documentation
 
 ## Executive Summary
 
-v1.1 is a pure frontend polish milestone — zero changes to the Rust/WASM game engine. All six features (piece animations, animated win line, thinking delay, localStorage scores, sound effects, dark mode) are implemented exclusively in the JS/CSS/HTML layer using native browser platform APIs. No new npm or Cargo dependencies are required. The existing split architecture — Rust owns game logic, JS/CSS owns presentation — is the correct foundation and needs no restructuring for this milestone.
+v1.2 is a pure infrastructure milestone — the game itself is frozen. The goal is to package the existing `dist/` output (HTML + CSS + JS + `.wasm`) as a multi-arch Docker image served by nginx and publish it to Docker Hub via GitHub Actions on git tag push. This is a well-understood pattern with excellent official documentation and no significant unknowns.
 
-The recommended approach is to implement features in risk-ascending order: start with pure CSS changes (dark mode, piece animations), move to isolated JS data-layer changes (localStorage, thinking delay), then tackle the two medium-complexity features (win line SVG, Web Audio) that have the most integration surface. The thinking delay must be implemented before sound effects because audio timing depends on the async event-handler structure. The win line must be wrapped in a `board-wrapper` element — adding that HTML wrapper is the only structural change to `index.html` that has downstream dependencies.
+The single most important architectural insight is that **WebAssembly is architecture-neutral bytecode**. The Rust/wasm-pack build does not need to run twice for amd64 and arm64 — the `.wasm` output is identical for both. Only the nginx binary in the serve stage differs per arch, which Docker's multi-arch manifest handles automatically. This means the Dockerfile's build stages should use `--platform=$BUILDPLATFORM` to run on the native runner architecture, and only the final nginx stage needs to instantiate per-platform via BuildKit. Without this, the arm64 Rust compile runs under QEMU emulation and becomes 10–30× slower — turning a 3-minute build into a 15–30 minute one.
 
-The dominant risks are: (1) the `boardEl.innerHTML = ''` render pattern that fights CSS animations — must solve before writing any keyframes; (2) Web Audio autoplay policy silently blocking the first sound; and (3) the thinking-delay timer not being cancelled on game reset, causing ghost moves. All three are well-understood and have documented prevention patterns. The total code delta is modest: ~210 LOC across 3 modified files + 1 new `audio.js` module.
+The main risks are configuration mistakes rather than architectural unknowns: missing `.dockerignore` (sends gigabytes of `target/` to the Docker daemon), wrong MIME type for `.wasm` in nginx (breaks WASM streaming compilation in browsers), and credential hygiene (use Docker Hub access tokens scoped to the repo, not the account password). All are preventable at authoring time and straightforward to verify with a smoke test.
 
 ---
 
 ## Key Findings
 
-### Recommended Stack
+### Stack Additions
 
-**No new dependencies.** All six v1.1 features are implementable with Baseline Widely Available browser platform APIs. The existing stack (Rust 1.94.1 + wasm-pack 0.14.0 + Vite 8.0.8 + vanilla JS/CSS) is unchanged. The only new file is `src/audio.js`, an ES module that the existing Vite build picks up without configuration changes.
+This milestone adds **only infrastructure tooling** — no changes to Rust/JS/CSS codebase.
 
-**Core technologies — unchanged:**
-- **Rust/WASM via wasm-pack** — game logic, AI, win detection — zero v1.1 changes
-- **Vite 8 + vite-plugin-wasm** — dev server and bundler — zero config changes needed
-- **Vanilla JS (ES modules)** — all 6 features live here; ~210 LOC delta
-- **CSS with custom properties** — all color theming via `var(--*)` makes dark mode a single `@media` block
+**New Docker base images (verified on Docker Hub 2026-04-14):**
+- `rust:1.94.1-slim` — Rust build stage; Debian slim (glibc) required because wasm-bindgen-cli prebuilt binaries link against glibc, not musl; `rust:alpine` breaks wasm-pack
+- `node:22-alpine3.23` — Vite build sub-stage; Node 22 LTS on Alpine (~54 MB); multi-arch
+- `nginx:1.29.8-alpine3.23` — Final serve image; ~24 MB; multi-arch manifest covers amd64, arm64, arm/v7, and more
 
-**New platform API surface (all zero-dependency, native browser):**
-- `@keyframes` + CSS `animation` property — piece pop-in and win line draw animations
-- `stroke-dashoffset` on inline SVG — win line animation (or CSS `scaleX` on a `<div>`)
-- `window.localStorage` — score persistence and mute preference
-- Web Audio API (`AudioContext`, `OscillatorNode`, `GainNode`) — synthesized game sounds
-- `@media (prefers-color-scheme: light)` — light theme override
-- `setTimeout` / `clearTimeout` — thinking delay
+**New GitHub Actions (all latest as of 2026-04-14):**
+- `docker/setup-qemu-action@v4` — ARM64 emulation on amd64 runner
+- `docker/setup-buildx-action@v4` — Multi-platform BuildKit builder
+- `docker/login-action@v4` — Docker Hub authentication
+- `docker/build-push-action@v7` — Multi-arch build + push (Node 24 runtime)
+- `docker/metadata-action@v6` — Semver tags from git tag (`v1.2.0` → `1.2.0`, `1.2`, `1`, `latest`)
 
-### Expected Features
+**New files to create (no existing files change):**
+- `Dockerfile` — multi-stage build
+- `.dockerignore` — excludes `target/`, `node_modules/`, `pkg/`, `dist/`
+- `nginx.conf` — WASM MIME type, gzip, Cache-Control, try_files
+- `.github/workflows/docker-publish.yml` — tag-triggered CI/CD
+- Docker Hub README / repo README section
 
-**Must have (table stakes) — these make v1.0 feel "finished":**
-- **Piece placement animation** — bare text pop-in feels jarring; CSS `@keyframes` scale animation with spring easing fixes this in ~20 CSS LOC
-- **Persistent scores via localStorage** — resetting on F5 feels like a bug; users expect persistence universally
-- **Computer thinking delay (300–800ms)** — instant AI response feels robotic; already flagged in v1.0 code as explicitly deferred
-- **Dark mode (`prefers-color-scheme`)** — app already uses dark theme; not adapting to light OS preference is an oversight
+**Version compatibility confirmed:**
+- `docker/build-push-action@v7` requires Actions Runner ≥ v2.327.1 (`ubuntu-latest` satisfies)
+- All Docker actions updated together March 2026 to Node 24 runtime; use `v4`/`v6`/`v7` major pins
 
-**Should have (differentiators) — rare in competing implementations:**
-- **Animated win line** — most TTT games just highlight cells; a line drawing through the winners is theatrically satisfying and visually rare
-- **Sound effects + mute toggle** — neither Neave's nor Google's embedded TTT has sounds; Web Audio synthesized tones add zero bundle bytes
+### Feature Table Stakes
 
-**Defer (anti-features for this milestone):**
-- Confetti / particle effects — obscures board, adds 20–40KB library weight, overkill for 30-second games
-- Volume slider — binary mute provides 80% value at 10% complexity
-- Manual theme toggle — pure CSS `@media` handles use case without UI chrome or JS
-- `localStorage` board state — 30-second games; mid-game restoration is not a felt pain point
-- Audio files (.mp3/.ogg) — synthesized oscillators are instant, zero-byte, and sufficient for game UI sounds
+**Must have for v1.2 launch (all P1):**
+- **Multi-stage Dockerfile** — build stage (`rust:slim` + `node:alpine`) → serve stage (`nginx:alpine` only). Without it, the image is ~2 GB.
+- **.dockerignore** — must exist before first `docker build`. `target/` alone can be 1–3 GB.
+- **Custom nginx.conf** — `application/wasm` MIME type (browsers reject WASM without it), gzip, `Cache-Control: immutable` for Vite hashed assets, `no-cache` for `index.html`, `try_files` for SPA routing.
+- **HEALTHCHECK** — 1 line; enables container orchestrators to detect silent nginx failures.
+- **Multi-arch manifest (amd64 + arm64)** — arm64 is now dominant for VPS providers (AWS Graviton, Hetzner, Oracle Free Tier). amd64-only runs under emulation on arm64 — bad for game responsiveness.
+- **GitHub Actions CI on git tag push** — `on: push: tags: ['v*']`; no push on every commit.
+- **OCI image labels** — auto-generated by `docker/metadata-action`; enables Renovate/Dependabot image tracking.
+- **GHA layer cache** — `cache-from/cache-to: type=gha,mode=max`; reduces warm build from ~10 min to ~3 min.
+- **README usage docs** — `docker pull` + `docker run` examples; Docker Hub description.
+
+**Defer to v1.3+:**
+- Docker Compose example in repo
+- Security headers (X-Content-Type-Options, X-Frame-Options, CSP) — low priority for a game with no auth/user data
+- ARM v7 platform (32-bit Raspberry Pi) — extremely slow under QEMU; add only on request
+- GitHub Container Registry (ghcr.io) mirror
 
 ### Architecture Approach
 
-All changes are additive to the JS/CSS/HTML layer. The Rust/WASM binary (`src/wasm_api.rs`, `Cargo.toml`) is untouched. The one structural HTML change is wrapping `.board` in a `<div class="board-wrapper">` (required for the win line overlay to escape `overflow: hidden`). A new `src/audio.js` ES module encapsulates the `AudioContext` singleton, sound definitions, and mute state — keeping audio complexity out of the already 215-LOC `main.js`.
+Four new files, zero changes to existing code. The Dockerfile has two stages: a heavy build stage (`rust:1.94.1-slim`) that installs wasm-pack, Node, and npm then runs `wasm-pack build --target web --release` followed by `npm run build`, producing `dist/`; and a lean serve stage (`nginx:1.29.8-alpine3.23`) that copies only `dist/` plus a custom `nginx.conf`. Both build stages carry `--platform=$BUILDPLATFORM` so they always run native on the amd64 CI runner. BuildKit builds the serve stage twice (once per platform) and creates a multi-arch manifest pointing to the correct nginx binary per arch, with identical static file content in both.
 
-**Major components and their v1.1 changes:**
-1. **`src/style.css`** *(modified)* — `@keyframes cell-pop`; `.win-line` + 8 position classes + `@keyframes win-draw`; `@media (prefers-color-scheme: light)` override block; `--hover-bg` variable; `@media (prefers-reduced-motion)` guards
-2. **`src/main.js`** *(modified)* — `thinkDelay()` + `async handleCellClick`; `loadScore()`/`saveScore()`; `showWinLine()`/`clearWinLine()` helpers; `import { sounds }` + 5 call sites; mute button wiring
-3. **`index.html`** *(modified)* — `<div class="board-wrapper">` wrapper, `<div id="win-line" hidden>` sibling of board, `<button id="mute-btn">` near title
-4. **`src/audio.js`** *(new)* — `AudioContext` singleton (lazy init), `playTone()` primitive with envelope shaping, `sounds.*` named exports, `toggleMute()`/`isMuted()`, mute localStorage persistence
+**Major components and responsibilities:**
+
+| Component | Responsibility |
+|-----------|----------------|
+| `Dockerfile` build stage | Install Rust + wasm-pack + Node; compile WASM; run Vite build; produce `dist/` |
+| `Dockerfile` serve stage | nginx:alpine + `dist/` + `nginx.conf`; the final ~10 MB image |
+| `nginx.conf` | WASM MIME type, gzip compression, Cache-Control headers, SPA `try_files` routing |
+| `.dockerignore` | Exclude `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/` from build context |
+| `docker-publish.yml` | Tag-triggered GitHub Actions workflow: QEMU → Buildx → Login → Meta → Build+Push |
+
+**Layer cache optimization order (critical for CI speed):**
+1. `COPY Cargo.toml Cargo.lock` → `COPY package.json package-lock.json` → `RUN npm ci` (cached until lockfiles change)
+2. `COPY src/ index.html vite.config.js` → `RUN wasm-pack build` → `RUN npm run build` (invalidates on source change)
+3. wasm-pack **must** run before Vite — Vite imports `pkg/tic_tac_toe.js` which doesn't exist until wasm-pack runs
 
 ### Critical Pitfalls
 
-1. **`innerHTML = ''` kills animation state** — `renderBoard()` wipes all 9 cells on every call. Naive approach animates all pieces on every move. **Fix:** Either switch to incremental DOM updates (update existing cells in-place, only animate the newly-added cell) or track the new-cell index before wiping and re-apply the animation class only to that cell using `void el.offsetWidth` force-reflow to restart animation.
+1. **QEMU-emulated Rust compile (10–30× slowdown)** — Use `FROM --platform=$BUILDPLATFORM rust:1.94.1-slim` and `FROM --platform=$BUILDPLATFORM node:22-alpine3.23` on build stages. WASM output is arch-neutral; there is zero reason to compile Rust under arm64 emulation. Without this, an arm64 build takes 15–30 min vs 3 min native. Must be in the Dockerfile from line 1 — not patched in after a slow build.
 
-2. **`overflow: hidden` on `.board` clips the win-line overlay** — Any overlay positioned absolutely *inside* `.board` is silently clipped. **Fix:** Add `<div class="board-wrapper" style="position:relative">` and position the win-line element as a *sibling* of `.board` inside the wrapper — not a child.
+2. **Missing `application/wasm` MIME type** — Always `include /etc/nginx/mime.types;` in `nginx.conf` AND add an explicit `types { application/wasm wasm; }` block. Without it, nginx serves `.wasm` as `application/octet-stream` and browsers throw `WebAssembly.compileStreaming(): Response has unsupported MIME type`. The game returns 200 OK but silently fails to initialize — the worst kind of bug. Verify with: `curl -I http://localhost/assets/*.wasm | grep content-type`.
 
-3. **Web Audio autoplay policy blocks the first sound** — `AudioContext` created before a user gesture starts in `suspended` state. First cell click produces no sound, no error. **Fix:** Create `AudioContext` lazily inside the first click handler (`ensureAudio()` pattern); always call `audioCtx.resume()` if `state === 'suspended'` before playing.
+3. **Missing `.dockerignore`** — Create before first `docker build`. The Rust `target/` directory is 1–3 GB. Without `.dockerignore`, every build transfers gigabytes before a single `FROM` executes. Both `target/` AND `node_modules/` must be excluded — ignoring only one is a common mistake for Rust+Node projects.
 
-4. **Thinking timer not cancelled on game reset causes ghost moves** — If the user clicks "New Game" during the 300–800ms delay, the pending `setTimeout` fires `game.computer_move()` on the freshly reset board. **Fix:** Store `thinkingTimer` ID; call `clearTimeout(thinkingTimer)` in `resetGame()` before resetting WASM state; guard inside callback with `if (game.get_status() !== 'playing') return`.
+4. **Multi-arch build without `--push` is invisible** — `docker buildx build --platform linux/amd64,linux/arm64` without `--push` exits 0 but stores nothing in the local Docker image store. Multi-arch manifests can only be stored in a registry. For local testing use single-platform: `docker buildx build --platform linux/amd64 --load -t test .`
 
-5. **Hardcoded hex values survive theme change** — `.cell:hover` uses `#1e2a4a` (hardcoded dark hex) and the JS error handler uses inline `cssText` with hardcoded dark colors. `@media (prefers-color-scheme: light)` only overrides `var(--*)` usages. **Fix:** Extract `#1e2a4a` to `var(--hover-bg)` before implementing dark mode; replace inline error styles with a CSS class.
+5. **Docker Hub password vs. access token** — Use a repository-scoped Docker Hub access token stored as `secrets.DOCKERHUB_TOKEN`. Store the username as `vars.DOCKERHUB_USERNAME` (not a secret — it's public). Never use the account password in CI. Tokens are revocable without changing the account password.
 
 ---
 
 ## Implications for Roadmap
 
-Based on combined research, the natural phase structure follows risk-ascending order while respecting implementation dependencies. All features are additive — none require revisiting v1.0 game logic.
+This milestone has a clear natural dependency order — each phase's output is required input for the next. Three phases are suggested.
 
-### Phase 1: CSS Foundation & Persistence
-**Rationale:** Lowest-risk changes first. Dark mode and localStorage are fully isolated with no interdependencies. Dark mode validates that the CSS custom property system covers all color usages (audit for hardcoded hex values before writing the `@media` block). localStorage establishes the `try/catch` persistence pattern that sound's mute preference will reuse.
-**Delivers:** Scores survive page refresh; light-mode OS users see adapted colors; `--hover-bg` CSS variable extracted; all hardcoded colors replaced with `var(--*)` references
-**Addresses:** Dark mode (table stakes), persistent scores (table stakes)
-**Avoids:** Pitfall 7 (FOUC — pure CSS only, no JS theme switching), Pitfall 16 (audit hardcoded hex before writing `@media` block), Pitfall 6 (all localStorage calls in try/catch), Pitfall 10 (namespaced key: `ttt-v1-scores`)
+### Phase 1: Dockerfile + nginx Config
 
-### Phase 2: CSS Piece Animations
-**Rationale:** Pure CSS changes to `style.css`. Must resolve the `boardEl.innerHTML = ''` animation strategy before writing any keyframes (Pitfall 1) — this decision gates all subsequent animation work. Implementing before the thinking delay means animations can be tested immediately; once the delay is added (Phase 3) the natural pace makes them feel even better.
-**Delivers:** Piece pop-in animation on X/O placement; `prefers-reduced-motion` accessibility guard established for all subsequent animations; animation-fill-mode pattern validated
-**Addresses:** Smooth piece placement animation (table stakes)
-**Avoids:** Pitfall 1 (choose incremental DOM update OR void-reflow strategy before writing CSS), Pitfall 8 (scope `transition: background` to un-taken cells via `:not(.cell--taken)` to prevent conflict with keyframe animation)
+**Rationale:** Everything else depends on a correct Dockerfile. CI can't be wired up until the image builds and produces a correct output. This is the core deliverable — everything else is automation and docs on top of it.
 
-### Phase 3: Thinking Delay (async refactor)
-**Rationale:** Converts `handleCellClick` to `async` — this is the core structural change that sound timing (Phase 4) and win-line timing (Phase 5) depend on. Medium risk because it touches the main event-handler flow. Must be done before sound effects so `sounds.computerMove()` fires at the right moment (after the delay, when the piece is actually placed — not before the delay).
-**Delivers:** Computer feels deliberate rather than robotic; async `handleCellClick` structure ready for downstream integration; `thinkingTimer` cancellation in `resetGame()` prevents ghost moves
-**Addresses:** Computer thinking delay (table stakes)
-**Avoids:** Pitfall 5 (store timer ID; cancel in `resetGame()`; guard callback with `game.get_status()` check)
+**Delivers:** A locally-buildable, locally-testable Docker image that serves the game correctly at ~10 MB.
 
-### Phase 4: Sound Effects & Mute Toggle
-**Rationale:** Most integration surface of any single feature (new module + HTML button + 5 call sites + localStorage mute persistence). Depends on the async flow from Phase 3 being correct. A new `src/audio.js` module isolates all audio complexity from `main.js`.
-**Delivers:** Synthesized audio feedback for moves/win/loss/draw; mute toggle with persisted preference; zero new bundle bytes (oscillator tones, no audio files)
-**Addresses:** Sound effects with mute toggle (differentiator)
-**Avoids:** Pitfall 3 (lazy `AudioContext` init via `ensureAudio()` on first click), Pitfall 4 (`onended` cleanup on every oscillator node), Pitfall 15 (envelope shaping — attack/decay ramps prevent click/pop artifacts), Pitfall 11 (persist mute state to `ttt-v1-muted` in localStorage)
+**Implements:**
+- `Dockerfile` (multi-stage; `--platform=$BUILDPLATFORM` on build stages; layer-cache-optimized COPY order)
+- `.dockerignore` (Rust + Node dual-ecosystem exclusions; must exist before first `docker build`)
+- `nginx.conf` (WASM MIME type, gzip, Cache-Control immutable on `/assets/`, `no-cache` on root, `try_files` SPA routing)
+- HEALTHCHECK and EXPOSE 80 instructions
 
-### Phase 5: Animated Win Line
-**Rationale:** Most complex feature — SVG overlay or CSS `scaleX` div, coordinate math, CSS animation, HTML structural change (`board-wrapper`). Saved for last because it requires all other visual polish to be in place (pieces animate, timing feels right) so win-line timing and animation delays can be calibrated against real game flow. The `board-wrapper` HTML change is a prerequisite for this phase.
-**Delivers:** Line draws itself through winning cells; theatrical, visually rare win moment; restart button timing respects animation duration
-**Addresses:** Animated win line (differentiator)
-**Avoids:** Pitfall 2 (board-wrapper sibling pattern — must be first step of this phase), Pitfall 9 (use `getBoundingClientRect()` for cell coordinates rather than CSS percentage math to account for grid gaps), Pitfall 13 (chain animation completion → delay → computer move as sequential async flow), Pitfall 14 (disable restart button for `WIN_ANIMATION_DURATION_MS` before re-enabling)
+**Avoids:** QEMU slowness pitfall, WASM MIME type pitfall, bloated image pitfall, `.dockerignore` pitfall.
+
+**Verification gate before Phase 2:**
+- `docker buildx build --platform linux/amd64 --load -t tic-tac-toe:test .` succeeds
+- `docker image ls tic-tac-toe:test` shows <20 MB
+- `docker run --rm -p 8080:80 tic-tac-toe:test` → game loads at http://localhost:8080
+- `curl -I http://localhost:8080/assets/*.wasm` shows `Content-Type: application/wasm`
+
+### Phase 2: GitHub Actions CI/CD
+
+**Rationale:** CI automates the release workflow. Only wire it up after the Dockerfile is verified correct locally — debugging a broken Dockerfile through 5-minute CI loops is painful and wastes GitHub Actions minutes.
+
+**Delivers:** Automated multi-arch publish to Docker Hub on `git tag v* && git push --tags`.
+
+**Implements:**
+- `.github/workflows/docker-publish.yml` (QEMU → Buildx → Login → Meta → Build+Push)
+- Docker Hub repository created + repository-scoped access token generated
+- GitHub repository secrets/variables configured (`DOCKERHUB_TOKEN` secret, `DOCKERHUB_USERNAME` variable)
+- Semver tag strategy via `docker/metadata-action@v6` (`v1.2.0` → `1.2.0`, `1.2`, `1`, `latest`)
+- GHA layer cache (`cache-from/cache-to: type=gha,mode=max`)
+
+**Avoids:** Password vs. token pitfall, `latest`-on-every-push pitfall, multi-arch without `--push` pitfall.
+
+**Verification gate before Phase 3:**
+- `git tag v1.2.0 && git push --tags` triggers workflow and completes without error
+- `docker manifest inspect user/tic-tac-toe:1.2.0` shows both `linux/amd64` and `linux/arm64`
+- `docker run --rm -p 8080:80 user/tic-tac-toe:1.2.0` → game works
+
+### Phase 3: Documentation
+
+**Rationale:** README must reference the real published image name with the real tag. Write it last, after Phase 2 confirms the image name and `docker pull` command. Can't write accurate docs for something that doesn't exist yet.
+
+**Delivers:** Docker Hub README + repository README section with complete usage instructions.
+
+**Implements:**
+- `docker pull` command with correct image reference
+- `docker run` one-liner (`-p 8080:80`)
+- Architecture note (multi-arch: works on ARM VPS and x86 alike)
+- Reverse proxy note (Caddy / nginx upstream)
+- Docker Compose snippet (bonus; v1.3 candidate if time allows)
 
 ### Phase Ordering Rationale
 
-- **CSS-only phases first** — no JS risk, easy to test in isolation, validates the custom property system
-- **localStorage before sounds** — both persist state to `localStorage`; establish the `try/catch` pattern once and reuse it for the mute preference key
-- **Async refactor (delay) before sounds** — audio timing correctness (when `sounds.computerMove()` fires) depends on the async event handler being in place
-- **Win line last** — requires the `board-wrapper` HTML structural change; best added when all other visual polish is stable and timing calibration is possible against real game feel
-- **All phases are purely additive** — no phase modifies or reverts a prior phase's work; game remains playable after each phase completes
+- **Dockerfile before CI:** CI is a thin wrapper around `docker buildx build`. Debugging Dockerfile issues through CI feedback loops is slow and expensive. Get the local build right first.
+- **`.dockerignore` in Phase 1, not separate:** It's a 10-line file that must exist before `docker build` is ever run — inseparable from Dockerfile authoring.
+- **nginx.conf in Phase 1, not later:** The WASM MIME type correctness must be verified locally before CI is wired up. If MIME type is wrong, the game silently fails to initialize — a local smoke test catches this in seconds vs. debugging in production.
+- **Documentation last:** The `docker pull` command in the README must match the real image name. Can't write it until Phase 2 publishes the image.
 
 ### Research Flags
 
-**Phases with well-documented patterns (skip `/gsd-research-phase`):**
-- **Phase 1 (Dark mode + localStorage):** Pure CSS media query and well-understood localStorage API — exhaustively documented on MDN, zero unknowns
-- **Phase 3 (Thinking delay):** `setTimeout` wrapper pattern — ARCHITECTURE.md has exact implementation code ready to use
-
-**Phases that may benefit from brief pre-implementation review:**
-- **Phase 2 (CSS animations):** The `innerHTML = ''` animation strategy choice (incremental DOM vs void-reflow) should be decided by inspecting current `renderBoard()` carefully before writing any CSS. PITFALLS.md documents both strategies with code. Pick one before writing keyframes.
-- **Phase 4 (Sound effects):** Web Audio autoplay policy behavior varies slightly by browser. Test the lazy-init `ensureAudio()` pattern in Chrome, Firefox, and Safari before assuming uniform behavior. PITFALLS.md patterns are correct but cross-browser testing is advisable on first play-through.
-- **Phase 5 (Win line):** No additional research needed — but allocate time for visual calibration across viewport sizes. The SVG coordinate math is the only genuine implementation variable.
+**All phases have standard, well-documented patterns — no `/gsd-research-phase` needed:**
+- **Phase 1 (Dockerfile):** Docker multi-stage build with `--platform=$BUILDPLATFORM` is the official Docker recommendation. STACK.md and ARCHITECTURE.md contain complete reference Dockerfiles.
+- **Phase 2 (CI/CD):** Docker's official GitHub Actions docs provide exact workflow YAML. All action versions verified. STACK.md contains a complete reference workflow.
+- **Phase 3 (Docs):** Writing task — no technical research needed.
 
 ---
 
@@ -137,33 +173,35 @@ Based on combined research, the natural phase structure follows risk-ascending o
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All features use Baseline Widely Available APIs verified against MDN; codebase inspection confirmed no new deps needed; all 6 browser APIs work in Chrome, Firefox, Safari, Edge |
-| Features | HIGH | v1.0 codebase directly inspected (215 LOC main.js, 186 LOC style.css); feature boundaries clear; competitor analysis confirms differentiator rationale for sound and win-line |
-| Architecture | HIGH | Direct inspection of all 4 files; integration points mapped precisely with line-number references; data-flow diagrams traced before/after for each feature |
-| Pitfalls | HIGH | Each pitfall derives from MDN-documented API behavior or direct codebase analysis of specific code patterns; all 16 pitfalls have concrete prevention code |
+| Stack | HIGH | All image tags and action versions verified live against Docker Hub and GitHub Releases 2026-04-14 |
+| Features | HIGH | Official Docker + nginx + GitHub Actions docs; no community inference; all features are established patterns |
+| Architecture | HIGH | `--platform=$BUILDPLATFORM` is the official Docker recommendation; WASM arch-neutrality confirmed by WebAssembly spec |
+| Pitfalls | HIGH | Each pitfall verified against official docs; WASM MIME type requirement confirmed by MDN Fetch spec |
 
-**Overall confidence:** HIGH
+**Overall confidence: HIGH**
 
 ### Gaps to Address
 
-- **Animation DOM strategy:** Research documents two valid approaches (incremental DOM update vs void-reflow) without prescribing one. Inspect `renderBoard()` during Phase 2 to determine which fits better — incremental update is cleaner if the function can be refactored without touching win highlighting logic; void-reflow is simpler if full-board rebuild must be preserved.
-- **Win line coordinate precision:** ARCHITECTURE.md uses CSS percentage positioning (`.win-line--row0 { top: calc(1/6 * 100%) }`) while PITFALLS.md recommends `getBoundingClientRect()` for gap-accuracy. Test CSS percentages first (simpler); fall back to DOM measurement if gap misalignment is visible.
-- **Cross-browser audio testing:** Web Audio autoplay policy is consistent in principle but implementation varies. Validate the lazy-init pattern in all 4 target browsers during Phase 4 before considering it done.
+- **Docker Hub repository name:** The workflow uses `${{ vars.DOCKERHUB_USERNAME }}/tic-tac-toe` — decide the exact image name before writing the workflow; the Docker Hub repo must be created manually before Phase 2.
+- **GitHub repository secrets/variables:** `DOCKERHUB_TOKEN` (secret) and `DOCKERHUB_USERNAME` (variable) must be configured in GitHub repo settings before the first tag push. One-time manual step — not automatable.
+- **wasm-pack PATH after `curl | sh` install:** wasm-pack installs to `~/.cargo/bin/`. The Dockerfile may need `ENV PATH="/root/.cargo/bin:${PATH}"` after the install step. Verify during Phase 1 build.
+- **wasm-opt in Docker:** `wasm-pack --release` runs `wasm-opt` automatically. If it fails on `rust:1.94.1-slim` (rare), fall back to `--no-opt` — binary is ~10–30% larger but functionally identical.
 
 ---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- MDN Web Docs — Web Audio API, autoplay policy, `OscillatorNode`, `GainNode` (updated Sep–Oct 2025)
-- MDN Web Docs — `Window.localStorage`, `SecurityError` exceptions (updated Nov 2025)
-- MDN Web Docs — `@media prefers-color-scheme`, `prefers-reduced-motion` (updated Dec 2025)
-- MDN Web Docs — CSS `@keyframes`, `animation`, `animation-fill-mode` (updated Dec 2025)
-- Codebase direct inspection: `src/main.js` (215 LOC), `src/style.css` (186 LOC), `index.html` (45 LOC), `src/wasm_api.rs` (95 LOC)
-
-### Secondary (MEDIUM confidence)
-- Competitor analysis (v1.0 research, 2026-04-12) — playtictactoe.org (Neave), Google TTT, PaperGames.io — confirmed neither Neave nor Google TTT has sound effects (differentiator rationale for Phase 4)
+- Docker Hub live API — `nginx:1.29.8-alpine3.23`, `rust:1.94.1-slim`, `node:22-alpine3.23` multi-arch manifests confirmed 2026-04-14
+- Docker official docs: Multi-platform builds — https://docs.docker.com/build/building/multi-platform/
+- Docker official docs: GitHub Actions multi-platform — https://docs.docker.com/build/ci/github-actions/multi-platform/
+- Docker official docs: GitHub Actions cache backend — https://docs.docker.com/build/cache/backends/gha/
+- nginx official docs: ngx_http_gzip_module, ngx_http_headers_module, ngx_http_core_module
+- GitHub Releases: docker/setup-qemu-action v4.0.0, docker/setup-buildx-action v4.0.0, docker/login-action v4.1.0, docker/build-push-action v7.1.0, docker/metadata-action v6.0.0
+- MDN: WebAssembly/instantiateStreaming — MIME type requirement (`Content-Type: application/wasm`)
+- WebAssembly.org portability spec — confirms WASM is architecture-neutral bytecode
+- Direct codebase inspection: `vite.config.js`, `package.json`, `Cargo.toml`, `src/` structure
 
 ---
-*Research completed: 2026-04-13*
+*Research completed: 2026-04-14*
 *Ready for roadmap: yes*
