@@ -23,6 +23,8 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Docker
 
+> **Note:** Replace `<your-dockerhub-username>` with your Docker Hub username in all commands below.
+
 ### Run from Docker Hub
 
 ```bash
@@ -55,6 +57,28 @@ docker stop tic-tac-toe && docker rm tic-tac-toe
 docker buildx build --platform linux/amd64 --load -t tic-tac-toe:local .
 docker run --rm -p 8080:80 tic-tac-toe:local
 ```
+
+### Deploy behind a reverse proxy
+
+To serve the game publicly, proxy port 80 of the container through your web server.
+Replace `yourdomain.com` with your domain and adjust the upstream port if needed (default: 8080 mapped to container's 80).
+
+**nginx** (`/etc/nginx/sites-available/tic-tac-toe`):
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+Run `docker run -d -p 8080:80 --restart unless-stopped tic-tac-toe` to start the container in the background, then reload nginx.
 
 ## Development
 
