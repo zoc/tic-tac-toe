@@ -69,7 +69,10 @@ Plans:
 **Success criteria:**
 1. README contains a copy-pasteable `docker build` + `docker run -p 8080:80` one-liner that works without prior context
 2. README includes a note on deploying behind a reverse proxy (Caddy or nginx upstream) on a VPS
-**Plans:** TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 10-01-PLAN.md — Add Quick Start section and reverse proxy note to README.md
 
 ## Progress
 
