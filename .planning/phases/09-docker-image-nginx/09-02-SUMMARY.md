@@ -99,12 +99,12 @@ curl -sv http://localhost:8080/healthz
 
 | Task | Name | Commit | Files |
 |------|------|--------|-------|
-| 1 | Build Docker image + all automated verifications | (no-code task) | — |
-| 2 | Human verify — gameplay and browser DevTools | **PENDING** | — |
+| 1 | Build Docker image + all automated verifications | `a15547a` | — |
+| 2 | Human verify — gameplay and browser DevTools | ✅ Human approved | — |
 
 ## Checkpoint Reached
 
-**Task 2 is a `checkpoint:human-verify`.** The container must be started and gameplay verified in a browser. See CHECKPOINT REACHED message below.
+**Task 2 is a `checkpoint:human-verify`.** Human approved 2026-04-14 — gameplay verified in browser, DevTools confirmed MIME types and cache headers.
 
 ## Deviations from Plan
 

@@ -9,14 +9,14 @@ Requirements for the Docker Deployment milestone.
 
 ### Docker Image
 
-- [ ] **DOCK-01**: Developer can build the game image locally with a single `docker build` command
-- [ ] **DOCK-02**: Image serves `.wasm` files with correct `Content-Type: application/wasm`
-- [ ] **DOCK-03**: nginx serves Vite hashed assets with `Cache-Control: immutable` (1-year cache)
-- [ ] **DOCK-04**: nginx serves `index.html` with `Cache-Control: no-cache`
-- [ ] **DOCK-05**: gzip compression enabled for HTML, CSS, JS, and WASM
-- [ ] **DOCK-06**: Container responds healthy to `HEALTHCHECK` and exposes port 80
-- [ ] **DOCK-07**: `docker run -p 8080:80` starts the game at `http://localhost:8080`
-- [ ] **DOCK-08**: Image build context excludes `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/` (via `.dockerignore`)
+- [x] **DOCK-01**: Developer can build the game image locally with a single `docker build` command
+- [x] **DOCK-02**: Image serves `.wasm` files with correct `Content-Type: application/wasm`
+- [x] **DOCK-03**: nginx serves Vite hashed assets with `Cache-Control: immutable` (1-year cache)
+- [x] **DOCK-04**: nginx serves `index.html` with `Cache-Control: no-cache`
+- [x] **DOCK-05**: gzip compression enabled for HTML, CSS, JS, and WASM
+- [x] **DOCK-06**: Container responds healthy to `HEALTHCHECK` and exposes port 80
+- [x] **DOCK-07**: `docker run -p 8080:80` starts the game at `http://localhost:8080`
+- [x] **DOCK-08**: Image build context excludes `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/` (via `.dockerignore`)
 
 ### Documentation
 
@@ -50,14 +50,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DOCK-01 | Phase 9 | Pending |
-| DOCK-02 | Phase 9 | Pending |
-| DOCK-03 | Phase 9 | Pending |
-| DOCK-04 | Phase 9 | Pending |
-| DOCK-05 | Phase 9 | Pending |
-| DOCK-06 | Phase 9 | Pending |
-| DOCK-07 | Phase 9 | Pending |
-| DOCK-08 | Phase 9 | Pending |
+| DOCK-01 | Phase 9 | ✅ Complete |
+| DOCK-02 | Phase 9 | ✅ Complete |
+| DOCK-03 | Phase 9 | ✅ Complete |
+| DOCK-04 | Phase 9 | ✅ Complete |
+| DOCK-05 | Phase 9 | ✅ Complete |
+| DOCK-06 | Phase 9 | ✅ Complete |
+| DOCK-07 | Phase 9 | ✅ Complete |
+| DOCK-08 | Phase 9 | ✅ Complete |
 | DOCS-01 | Phase 10 | Pending |
 | DOCS-02 | Phase 10 | Pending |
 
@@ -68,4 +68,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-14*
-*Last updated: 2026-04-14 — traceability filled in after roadmap creation*
+*Last updated: 2026-04-14 — DOCK-01–08 marked complete after Phase 9 human verification*

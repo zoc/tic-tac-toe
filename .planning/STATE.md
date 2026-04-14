@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Docker Deployment
 status: executing
-last_updated: "2026-04-14T16:00:10.522Z"
-last_activity: 2026-04-14 -- Phase 9 planning complete
+last_updated: "2026-04-14T16:18:00.000Z"
+last_activity: 2026-04-14 -- Phase 9 complete (all 5 ROADMAP success criteria verified)
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 2
+  percent: 50
 ---
 
 # Project State
@@ -20,27 +20,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-14)
 
 **Core value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
-**Current focus:** Milestone v1.2 Docker Deployment — Phase 9: Docker Image & nginx
+**Current focus:** Milestone v1.2 Docker Deployment — Phase 10: Documentation
 
 ## Current Position
 
-Phase: 9 — Docker Image & nginx
-Plan: TBD
+Phase: 10 — Documentation
+Plan: 1 of TBD
 Status: Ready to execute
-Last activity: 2026-04-14 -- Phase 9 planning complete
+Last activity: 2026-04-14 -- Phase 9 complete (human verified, all 5 SC passed)
 
 ## Phase Queue
 
 | Phase | Goal | Status |
 |-------|------|--------|
-| **9. Docker Image & nginx** | Build and locally verify a multi-stage Docker image serving the game | **Not started** |
-| 10. Documentation | Write README usage docs after image is verified working | Not started |
+| ✅ **9. Docker Image & nginx** | Build and locally verify a multi-stage Docker image serving the game | **Complete** |
+| **10. Documentation** | Write README usage docs after image is verified working | **Up next** |
 
 ## Performance Metrics
 
-- Phases complete: 0/2
-- Plans complete: 0/2
-- Progress: 0%
+- Phases complete: 1/2
+- Plans complete: 2/2
+- Progress: 50%
 
 ## Accumulated Context
 
@@ -56,6 +56,10 @@ All v1.1 decisions logged in PROJECT.md Key Decisions table.
 - [Phase 07]: OscillatorNode synthesizer over audio files: zero network requests, no asset loading, ~82 lines of JS generating all sounds
 - [Phase 07]: Lazy AudioContext init satisfies Chrome/Safari autoplay policy — context created only inside user-gesture handler
 - [Phase 08]: No code changes needed — Phase 3 pre-implementation fully satisfies ANIM-02 and ANIM-03
+- [Phase 09]: wasm-pack pinned via cargo install wasm-pack@0.14.0 --locked (eliminates curl|sh supply-chain risk)
+- [Phase 09]: gzip_types excludes application/wasm — WASM pre-compressed by wasm-opt, double-gzip adds CPU cost for no benefit
+- [Phase 09]: HEALTHCHECK probes dedicated /healthz endpoint (not root /) to keep health check noise out of access logs
+- [Phase 09]: Node 20 LTS via NodeSource setup_20.x — apt default (Debian bookworm) provides Node 18, README promises Node 20+
 
 ### Pending Todos
 

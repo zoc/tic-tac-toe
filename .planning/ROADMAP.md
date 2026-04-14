@@ -36,7 +36,7 @@ See archive: `.planning/milestones/v1.1-ROADMAP.md`
 
 ## v1.2 Docker Deployment (Phases 9–10)
 
-- [ ] **Phase 9: Docker Image & nginx** — Build and locally verify a multi-stage Docker image serving the game
+- [x] **Phase 9: Docker Image & nginx** — Build and locally verify a multi-stage Docker image serving the game
 - [ ] **Phase 10: Documentation** — Write README usage docs after image is verified working
 
 ## Phase Overview
@@ -60,8 +60,8 @@ See archive: `.planning/milestones/v1.1-ROADMAP.md`
 **Plans:** 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — Fix Dockerfile (wasm-pack pin, Node 20, HEALTHCHECK) and nginx.conf (gzip, Cache-Control no-cache, /healthz)
-- [ ] 09-02-PLAN.md — Build image, run all 5 ROADMAP success criteria verifications, human verify gameplay
+- [x] 09-01-PLAN.md — Fix Dockerfile (wasm-pack pin, Node 20, HEALTHCHECK) and nginx.conf (gzip, Cache-Control no-cache, /healthz)
+- [x] 09-02-PLAN.md — Build image, run all 5 ROADMAP success criteria verifications, human verify gameplay
 
 ### Phase 10: Documentation
 **Goal:** Developer can find a clear README section explaining how to run the container locally and deploy it behind a reverse proxy on a VPS.
@@ -83,5 +83,5 @@ Plans:
 | 6. Thinking Delay | v1.1 | 1/1 | Complete | 2026-04-13 |
 | 7. Sound Effects & Mute | v1.1 | 1/1 | Complete | 2026-04-13 |
 | 8. Animated Win Line | v1.1 | 1/1 | Complete | 2026-04-13 |
-| 9. Docker Image & nginx | v1.2 | 0/1 | Not started | — |
+| 9. Docker Image & nginx | v1.2 | 2/2 | Complete | 2026-04-14 |
 | 10. Documentation | v1.2 | 0/1 | Not started | — |
