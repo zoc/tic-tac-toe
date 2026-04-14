@@ -78,6 +78,76 @@ A complete browser-based tic-tac-toe game: Rust game engine compiled to WebAssem
 
 ---
 
+# Retrospective: Milestone v1.1
+
+**Shipped:** 2026-04-13
+**Duration:** 1 day (2026-04-13)
+**Scope:** 5 phases (4-8), 5 plans, 25 commits, ~1,689 LOC total
+
+---
+
+## What Was Built
+
+All six polish features from v1.1 scope: CSS-only dark/light theming, localStorage score persistence, pop-in piece animations (incremental DOM), cancelable computer thinking delay, Web Audio synthesized sounds with mute toggle, and animated win line for all 8 orientations.
+
+---
+
+## What Went Well
+
+**Verify-first pattern dominated.** 3 of 5 phases (Phase 4, 7, 8) were verification-only — Phase 3 had pre-implemented all their requirements in commit `18a87a0`. The pattern is: run static grep checks → human browser approval. No wasted reimplementation.
+
+**Pre-implementation efficiency.** Because Phase 3 shipped all implementation in one large commit, Phases 4/7/8 became cheap verification checkpoints. Total time for these three phases: ~1 hour combined. This is a strong argument for front-loading implementation when the design is clear.
+
+**Incremental DOM update was a clean fix.** The Phase 5 bug (pop-in firing on all pieces) had a clear root cause (`innerHTML=''` wipe on every render) and a clean fix (children.length guard + patch path). One file changed, 15 minutes end-to-end.
+
+**clearTimeout was the right tool.** Phase 6 FEEL-02 (cancel thinking delay on New Game) used `clearTimeout` rather than AbortController or a game-ID counter. Simpler, sufficient, readable. The pitfall documentation from earlier phases guided the choice.
+
+**Web Audio synthesis over files.** Zero audio files shipped. No network requests. ~82 LOC for 5 distinct sounds. The OscillatorNode/GainNode pattern is compact and browser-native — fits a 9-cell game perfectly.
+
+---
+
+## What Could Have Gone Better
+
+**REQUIREMENTS.md traceability not maintained during execution.** Same issue as v1.0 — three requirements (ANIM-01, FEEL-01, FEEL-02) were left unchecked in REQUIREMENTS.md even though their phases completed successfully. Discovered only at milestone archival. The checkbox state should be updated as part of the phase summary commit, not left for cleanup.
+
+**ROADMAP.md progress table had stale plan counts.** Phase 6 showed `0/?` plans and Phase 8 showed `0/?` plans in the table even after plans were created. Minor but creates confusion when reading state mid-milestone.
+
+**No milestone audit.** Proceeded without a `v1.1-MILESTONE-AUDIT.md`. In this case it was fine because the SUMMARY files made completeness obvious, but the audit would have caught the stale checkboxes earlier.
+
+---
+
+## Surprises
+
+- Phase 3 had pre-implemented all 16 v1.1 requirements before v1.1 planning even started. The entire Polish milestone was essentially "verify what Phase 3 built, fix two bugs, ship."
+- The `diag-rl` win-line CSS bug (`rotate(-45deg)` → `left: 95% + rotate(135deg)`) was subtle — an off-by-direction error that only shows in one of 8 possible win configurations.
+- Lazy AudioContext creation (on first user gesture) was essential for incognito mode in Safari, not just autoplay policy compliance.
+
+---
+
+## Decisions That Aged Well
+
+| Decision | Why It Held Up |
+|----------|---------------|
+| Pre-implement all v1.1 in Phase 3 | 3 of 5 subsequent phases became cheap verification passes |
+| CSS custom properties established in Phase 3 | Phase 4 theming required zero new architecture |
+| `@media (prefers-reduced-motion)` guard in CSS | ANIM-03 satisfied by construction — no JS needed |
+| Verify-first plan structure | Catches pre-implementation without re-implementing |
+
+---
+
+## What to Carry Forward
+
+- Update REQUIREMENTS.md checkboxes **during** phase execution, not at archival time
+- Add `prefers-reduced-motion` guard to all CSS animations from the start
+- Lazy AudioContext pattern is the correct default for any Web Audio feature — document it in CONVENTIONS.md
+- Incremental DOM update (build once, patch later) is the right pattern for any animation-on-add UI feature
+
+---
+
+*Written: 2026-04-14*
+
+---
+
 ## Cross-Milestone Trends
 
 *Updated after each milestone. Patterns that persist across multiple milestones.*
@@ -87,14 +157,18 @@ A complete browser-based tic-tac-toe game: Rust game engine compiled to WebAssem
 | Milestone | Phases | Plans | LOC | Duration | Commits |
 |-----------|--------|-------|-----|----------|---------|
 | v1.0 MVP | 3 | 3 | ~1,373 | 2 days | 44 |
+| v1.1 Polish & Feel | 5 | 5 | ~1,689 | 1 day | 25 |
 
 ### What Consistently Works
 
 - Bottom-up phased approach (logic → bridge → UI) keeps each phase independently testable
 - Code review after UI phases consistently finds XSS, a11y, and hover-state bugs
+- Verify-first plan structure: static grep checks + human browser approval catches pre-implementation without wasted re-work
+- Pre-implementing polish features alongside core features reduces later phase cost dramatically
 
 ### Watch Out For
 
 - CSS Grid: always set `grid-template-rows` AND `grid-template-columns` for square grids
 - Vite 8+: use `build.target: 'esnext'` instead of `vite-plugin-top-level-await`
-- Requirements traceability: mark requirements Complete during phase execution, not after
+- Requirements traceability: mark requirements Complete during phase execution, not after milestone archival
+- Web Audio: always use lazy AudioContext (created on first user gesture) — required for Safari/incognito autoplay policy
