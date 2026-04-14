@@ -51,7 +51,7 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [ ] Multi-stage Dockerfile with Rust/wasm-pack build stage and nginx:alpine serve stage
 - [ ] GitHub Actions workflow building linux/amd64 + linux/arm64 on git tag push
 - [ ] Public Docker Hub image (multi-arch manifest)
-- [ ] README / usage docs for running and deploying the container
+- [x] README / usage docs for running and deploying the container — Validated in Phase 10: Documentation
 
 ### Out of Scope
 
@@ -106,7 +106,12 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ## Current State
 
-**Milestone v1.1 complete** (2026-04-13). Full polished tic-tac-toe in the browser:
+**Phase 10 complete** (2026-04-14). Documentation for v1.2 Docker Deployment milestone added:
+- `## Quick Start` in README with plain `docker build` + `docker run` two-command block (DOCS-01)
+- `### Deploy behind a reverse proxy` nginx snippet inside `## Docker` section (DOCS-02)
+- Username placeholder note at top of `## Docker` section
+
+Prior state — **Milestone v1.1 complete** (2026-04-13). Full polished tic-tac-toe in the browser:
 - CSS-only dark/light theming via `prefers-color-scheme`, no JS, no FOUC
 - localStorage score persistence with graceful incognito degradation
 - Pop-in piece animation (incremental DOM update, only new piece animates)
@@ -151,4 +156,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 — v1.2 Docker Deployment milestone started*
+*Last updated: 2026-04-14 — Phase 10 documentation complete; v1.2 Docker Deployment milestone docs done*
