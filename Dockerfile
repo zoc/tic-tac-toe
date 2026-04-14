@@ -5,15 +5,14 @@ FROM --platform=$BUILDPLATFORM rust:slim AS build
 
 WORKDIR /app
 
-# Install Node.js (needed to run wasm-pack's bundled tools and for Vite build)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    nodejs \
-    npm \
+# Install Node.js 20 LTS via NodeSource (apt default is Node 18 on Debian bookworm)
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install wasm-pack (puts binary in ~/.cargo/bin)
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+# Install wasm-pack pinned to 0.14.0 via cargo (eliminates curl|sh supply-chain risk)
+RUN cargo install wasm-pack@0.14.0 --locked
 
 # Ensure cargo bin dir is on PATH for subsequent RUN layers
 ENV PATH="/root/.cargo/bin:${PATH}"
@@ -47,6 +46,9 @@ RUN npm run build
 # Serve stage: minimal nginx:alpine image (~8MB) with only the static files
 FROM nginx:alpine AS serve
 
+# Install curl for HEALTHCHECK probe
+RUN apk add --no-cache curl
+
 # Replace the default nginx site config with our custom one
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
@@ -54,3 +56,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/healthz || exit 1
