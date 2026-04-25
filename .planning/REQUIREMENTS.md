@@ -33,11 +33,18 @@ None identified — this milestone completes the core CI/CD pipeline.
 
 ## Traceability
 
-This section maps requirements to phases and will be populated by the roadmapper.
+This section maps requirements to phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | — |
+| CICD-01 | 11 | Not started |
+| CICD-02 | 11 | Not started |
+| CICD-03 | 11 | Not started |
+| CICD-04 | 11 | Not started |
+| DIST-01 | 11 | Not started |
+| DIST-04 | 11 | Not started |
+| DIST-02 | 12 | Not started |
+| DIST-03 | 12 | Not started |
 
 ---
 *Created: 2026-04-25*
