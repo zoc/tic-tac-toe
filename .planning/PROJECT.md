@@ -43,13 +43,29 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] README Quick Start with copy-pasteable `docker build` + `docker run` one-liner — Validated in Phase 10: Documentation — v1.2
 - [x] README nginx reverse proxy deployment section for VPS — Validated in Phase 10: Documentation — v1.2
 
-## Active Requirements (Next Milestone)
+## Current Milestone: v1.3 CI/CD & Distribution
 
-Candidates for v1.3 (CI/CD & Distribution):
-- [ ] GitHub Actions workflow building linux/amd64 + linux/arm64 on git tag push
-- [ ] Multi-arch manifest published to Docker Hub on release tag
-- [ ] Semver tags generated automatically from git tag (v1.2.0 → 1.2.0, 1.2, 1, latest)
-- [ ] OCI image labels attached via docker/metadata-action
+**Goal:** Automate multi-arch Docker image builds and publish to Docker Hub on release tags
+
+**Target features:**
+- GitHub Actions workflow triggered on git tag push
+- Multi-platform builds (linux/amd64 + linux/arm64)
+- Docker Hub publishing with semver tag variants
+- OCI image labels for metadata
+
+## Active Requirements
+
+### CI/CD Automation
+- [ ] **CICD-01**: GitHub Actions workflow triggers on git tag push (tags matching `v*`)
+- [ ] **CICD-02**: Workflow builds Docker image for linux/amd64 platform
+- [ ] **CICD-03**: Workflow builds Docker image for linux/arm64 platform
+- [ ] **CICD-04**: Multi-arch manifest created combining both platform images
+
+### Distribution
+- [ ] **DIST-01**: Images published to Docker Hub under user's repository
+- [ ] **DIST-02**: Semver tags generated automatically (v1.3.0 → tags: 1.3.0, 1.3, 1, latest)
+- [ ] **DIST-03**: OCI image labels attached (org.opencontainers.image.* annotations)
+- [ ] **DIST-04**: Docker Hub credentials securely managed via GitHub Secrets
 
 ### Out of Scope
 
@@ -153,4 +169,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-14 after v1.2 milestone — Docker Deployment shipped*
+*Last updated: 2026-04-25 after v1.3 milestone started — CI/CD & Distribution*
