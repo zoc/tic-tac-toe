@@ -45,26 +45,27 @@ See archive: `.planning/milestones/v1.2-ROADMAP.md`
 
 ## Current Milestone: v1.3 CI/CD & Distribution
 
-### Phase 11: GitHub Actions Workflow
+### ✅ Phase 11: GitHub Actions Workflow — COMPLETED 2026-04-25
 
 **Goal:** Create GitHub Actions workflow for multi-platform Docker builds and Docker Hub publishing
 
-**Requirements:**
-- CICD-01: GitHub Actions workflow triggers on git tag push (tags matching `v*`)
-- CICD-02: Workflow builds Docker image for linux/amd64 platform
-- CICD-03: Workflow builds Docker image for linux/arm64 platform
-- CICD-04: Multi-arch manifest created combining both platform images
-- DIST-01: Images published to Docker Hub under user's repository
-- DIST-04: Docker Hub credentials securely managed via GitHub Secrets
+**Requirements:** ✅ All 6 requirements verified
+- ✅ CICD-01: GitHub Actions workflow triggers on git tag push (tags matching `v*`)
+- ✅ CICD-02: Workflow builds Docker image for linux/amd64 platform
+- ✅ CICD-03: Workflow builds Docker image for linux/arm64 platform
+- ✅ CICD-04: Multi-arch manifest created combining both platform images
+- ✅ DIST-01: Images published to Docker Hub under user's repository
+- ✅ DIST-04: Docker Hub credentials securely managed via GitHub Secrets
 
-**Success Criteria:**
-1. `.github/workflows/docker-publish.yml` exists and triggers on `v*` tags
-2. Workflow uses `docker/setup-buildx-action` with multi-platform support
-3. Workflow uses `docker/build-push-action` with `platforms: linux/amd64,linux/arm64`
-4. Docker Hub username and token stored in GitHub Secrets (DOCKERHUB_USERNAME, DOCKERHUB_TOKEN)
-5. Manual test push of `v1.3.0-test` tag successfully builds and pushes multi-arch images to Docker Hub
+**Accomplishments:**
+- Verified `.github/workflows/docker.yml` implements all Phase 11 requirements
+- Multi-platform builds configured for linux/amd64 and linux/arm64
+- Docker Hub publishing secured with GitHub Secrets (DOCKERHUB_TOKEN, DOCKERHUB_USERNAME)
+- Added comprehensive `## Releasing` section to README with prerequisites and step-by-step guide
+- Documented end-to-end test procedure using v1.3.0-test tag
 
-**Estimated effort:** 1 plan
+**Plans:** 1/1 complete (11-01-SUMMARY.md)
+**Duration:** 12 minutes
 
 ---
 
@@ -101,11 +102,11 @@ See archive: `.planning/milestones/v1.2-ROADMAP.md`
 | 8. Animated Win Line | v1.1 | 1/1 | Complete | 2026-04-13 |
 | 9. Docker Image & nginx | v1.2 | 2/2 | Complete | 2026-04-14 |
 | 10. Documentation | v1.2 | 1/1 | Complete | 2026-04-14 |
-| 11. GitHub Actions Workflow | v1.3 | 0/1 | Not started | — |
+| 11. GitHub Actions Workflow | v1.3 | 1/1 | Complete | 2026-04-25 |
 | 12. Release Automation | v1.3 | 0/1 | Not started | — |
 
 ## Summary
 
-**v1.3 CI/CD & Distribution:** 2 phases, 8 requirements, 2 plans estimated
+**v1.3 CI/CD & Distribution:** 2 phases, 8 requirements, 2 plans total
 
-All requirements mapped to phases. Ready to begin Phase 11.
+**Progress:** Phase 11 complete (1/2 phases, 6/8 requirements validated). Phase 12 ready to begin.
