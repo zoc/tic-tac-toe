@@ -16,23 +16,21 @@ Then open http://localhost:8080 in your browser.
 Open `index.html` after building, or run a container:
 
 ```bash
-docker run --rm -p 8080:80 <your-dockerhub-username>/tic-tac-toe:latest
+docker run --rm -p 8080:80 fzoc/tic-tac-toe:latest
 ```
 
 Then open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ## Docker
 
-> **Note:** Replace `<your-dockerhub-username>` with your Docker Hub username in all commands below.
-
 ### Run from Docker Hub
 
 ```bash
 # Latest release
-docker run --rm -p 8080:80 <your-dockerhub-username>/tic-tac-toe:latest
+docker run --rm -p 8080:80 fzoc/tic-tac-toe:latest
 
 # Specific version
-docker run --rm -p 8080:80 <your-dockerhub-username>/tic-tac-toe:1.2.0
+docker run --rm -p 8080:80 fzoc/tic-tac-toe:1.3.0
 ```
 
 The image is a multi-arch manifest (`linux/amd64` + `linux/arm64`) — Docker will pull the correct variant for your machine automatically.
@@ -41,7 +39,7 @@ The image is a multi-arch manifest (`linux/amd64` + `linux/arm64`) — Docker wi
 
 ```bash
 docker run -d --name tic-tac-toe -p 8080:80 --restart unless-stopped \
-  <your-dockerhub-username>/tic-tac-toe:latest
+  fzoc/tic-tac-toe:latest
 ```
 
 Stop it with:
@@ -112,8 +110,8 @@ The repository maintainer must configure two GitHub settings:
    - All steps must show green checkmarks
 
 3. **Verify on Docker Hub:**
-   - Visit https://hub.docker.com/r/your-username/tic-tac-toe (replace `your-username` with your Docker Hub username)
-   - Tag `1.3.0` and `1.3` appear (Phase 12 will add major tag `1`)
+   - Visit https://hub.docker.com/r/fzoc/tic-tac-toe
+   - Tags `1.3.0`, `1.3`, `1`, and `latest` all appear
    - Both `linux/amd64` and `linux/arm64` architectures shown
 
 ### Workflow details
