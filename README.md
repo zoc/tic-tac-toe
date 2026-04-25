@@ -2,6 +2,10 @@
 
 A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished frontend featuring smooth CSS animations, synthesized sound effects, system dark mode, score persistence, and an animated win line. The computer is beatable — it plays well but makes occasional mistakes.
 
+## About This Project
+
+This project was created to test the [**get-shit-done**](https://github.com/ckreiling/get-shit-done) framework for AI-assisted software development. **Every single line of code, configuration, and documentation was written by AI** — no human coding involved. The entire development process, from initial setup through three milestone releases (v1.0 MVP, v1.1 Polish, v1.2 Docker, v1.3 CI/CD), was orchestrated using GSD's structured phase-based workflow with autonomous planning, execution, and verification.
+
 ## Quick Start
 
 ```bash
