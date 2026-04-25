@@ -80,6 +80,56 @@ server {
 
 Run `docker run -d -p 8080:80 --restart unless-stopped tic-tac-toe` to start the container in the background, then reload nginx.
 
+## Releasing
+
+This project uses GitHub Actions to automatically build and publish multi-platform Docker images to Docker Hub on every version tag push.
+
+### Prerequisites
+
+The repository maintainer must configure two GitHub settings:
+
+**Secret: DOCKERHUB_TOKEN**
+- Navigate to: Repository → Settings → Secrets and variables → Actions → New repository secret
+- Name: `DOCKERHUB_TOKEN`
+- Value: Docker Hub Personal Access Token (create at Docker Hub → Account Settings → Security → New Access Token with Read & Write scope)
+
+**Variable: DOCKERHUB_USERNAME**
+- Navigate to: Repository → Settings → Secrets and variables → Actions → Variables → New repository variable
+- Name: `DOCKERHUB_USERNAME`
+- Value: Your Docker Hub username (e.g., `johndoe`)
+
+### Creating a release
+
+1. **Tag the release:**
+   ```bash
+   git tag v1.3.0
+   git push origin v1.3.0
+   ```
+
+2. **Monitor the build:**
+   - GitHub Actions tab shows "Docker" workflow running
+   - Build takes 5-8 minutes
+   - All steps must show green checkmarks
+
+3. **Verify on Docker Hub:**
+   - Visit https://hub.docker.com/r/your-username/tic-tac-toe (replace `your-username` with your Docker Hub username)
+   - Tag `1.3.0` and `1.3` appear (Phase 12 will add major tag `1`)
+   - Both `linux/amd64` and `linux/arm64` architectures shown
+
+### Workflow details
+
+**Workflow file:** `.github/workflows/docker.yml`
+**Trigger:** Git tags matching `v*.*.*` (e.g., v1.2.0, v1.3.0)
+**Platforms:** linux/amd64, linux/arm64 (multi-arch manifest created automatically)
+**Cache:** GitHub Actions cache (speeds up subsequent builds)
+**Build time:** ~5-8 minutes with warm cache
+
+**Technical notes:**
+- Rust compilation runs natively (uses `--platform=$BUILDPLATFORM` in Dockerfile to avoid QEMU)
+- WASM bytecode is platform-neutral (identical output on both architectures)
+- Only the nginx:alpine serve stage cross-compiles under QEMU
+- Multi-arch manifest means users automatically get the correct architecture for their platform
+
 ## Development
 
 ### Prerequisites
@@ -131,19 +181,3 @@ npm run build
 - **nginx:alpine** — serves the static production build in Docker
 
 The AI uses minimax with ~25% random mistake injection — tunable in `src/ai.rs`.
-
-## Publish a new release
-
-Tag a commit to trigger the GitHub Actions Docker workflow:
-
-```bash
-git tag v1.2.0
-git push --tags
-```
-
-This builds `linux/amd64` + `linux/arm64` images and pushes them to Docker Hub with tags `1.2.0`, `1.2`, and `latest`.
-
-> **Required GitHub setup** (one-time):
-> - Create a Docker Hub access token: Hub → Account Settings → Security → New Access Token
-> - Add GitHub secret `DOCKERHUB_TOKEN` with the token value
-> - Add GitHub variable `DOCKERHUB_USERNAME` with your Docker Hub username
