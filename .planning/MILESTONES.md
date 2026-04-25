@@ -1,5 +1,22 @@
 # Milestones
 
+## v1.3 CI/CD & Distribution (Shipped: 2026-04-25)
+
+**Phases completed:** 2 phases (11-12), 2 plans, ~14 commits, 1 day (2026-04-25)
+
+**Key accomplishments:**
+
+- GitHub Actions workflow with multi-platform Docker builds for linux/amd64 + linux/arm64 triggered on v*.*.* tags
+- Docker Hub publishing with secure GitHub Secrets management (DOCKERHUB_TOKEN secret, DOCKERHUB_USERNAME variable)
+- Semver tag automation: v1.3.0 → generates tags 1.3.0, 1.3, 1, latest — all pointing to same multi-arch manifest
+- OCI image labels (org.opencontainers.image.* annotations) automatically generated via docker/metadata-action v5
+- README Releasing section with prerequisites, step-by-step release process, workflow details, and technical notes
+- Published to Docker Hub as fzoc/tic-tac-toe with full multi-arch support
+
+**Archive:** `.planning/milestones/v1.3-ROADMAP.md` · `.planning/milestones/v1.3-REQUIREMENTS.md`
+
+---
+
 ## v1.2 Docker Deployment (Shipped: 2026-04-14)
 
 **Phases completed:** 2 phases (9-10), 3 plans, ~42 commits, 2 days (2026-04-13 → 2026-04-14)

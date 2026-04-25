@@ -42,32 +42,21 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] `.dockerignore` excludes `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/` — Validated in Phase 9: Docker Image & nginx — v1.2
 - [x] README Quick Start with copy-pasteable `docker build` + `docker run` one-liner — Validated in Phase 10: Documentation — v1.2
 - [x] README nginx reverse proxy deployment section for VPS — Validated in Phase 10: Documentation — v1.2
-
-## Current Milestone: v1.3 CI/CD & Distribution
-
-**Goal:** Automate multi-arch Docker image builds and publish to Docker Hub on release tags
-
-**Target features:**
-- GitHub Actions workflow triggered on git tag push
-- Multi-platform builds (linux/amd64 + linux/arm64)
-- Docker Hub publishing with semver tag variants
-- OCI image labels for metadata
+- [x] GitHub Actions workflow triggers on git tag push (tags matching `v*`) — Validated in Phase 11: GitHub Actions Workflow — v1.3
+- [x] Workflow builds Docker image for linux/amd64 platform — Validated in Phase 11: GitHub Actions Workflow — v1.3
+- [x] Workflow builds Docker image for linux/arm64 platform — Validated in Phase 11: GitHub Actions Workflow — v1.3
+- [x] Multi-arch manifest created combining both platform images — Validated in Phase 11: GitHub Actions Workflow — v1.3
+- [x] Images published to Docker Hub under user's repository — Validated in Phase 11: GitHub Actions Workflow — v1.3
+- [x] Semver tags generated automatically (v1.3.0 → tags: 1.3.0, 1.3, 1, latest) — Validated in Phase 12: Release Automation — v1.3
+- [x] OCI image labels attached (org.opencontainers.image.* annotations) — Validated in Phase 12: Release Automation — v1.3
+- [x] Docker Hub credentials securely managed via GitHub Secrets — Validated in Phase 11: GitHub Actions Workflow — v1.3
+- [x] README Releasing section with prerequisites and step-by-step process — Validated in Phase 11: GitHub Actions Workflow — v1.3
 
 ## Active Requirements
 
-### CI/CD Automation
-- [ ] **CICD-01**: GitHub Actions workflow triggers on git tag push (tags matching `v*`)
-- [ ] **CICD-02**: Workflow builds Docker image for linux/amd64 platform
-- [ ] **CICD-03**: Workflow builds Docker image for linux/arm64 platform
-- [ ] **CICD-04**: Multi-arch manifest created combining both platform images
+No active requirements. Project is feature-complete for single-player tic-tac-toe with full CI/CD and distribution pipeline.
 
-### Distribution
-- [ ] **DIST-01**: Images published to Docker Hub under user's repository
-- [ ] **DIST-02**: Semver tags generated automatically (v1.3.0 → tags: 1.3.0, 1.3, 1, latest)
-- [ ] **DIST-03**: OCI image labels attached (org.opencontainers.image.* annotations)
-- [ ] **DIST-04**: Docker Hub credentials securely managed via GitHub Secrets
-
-### Out of Scope
+## Out of Scope
 
 - Multiplayer / two-human mode — single-player focus
 - Online / networked play — local browser only
@@ -96,6 +85,9 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - Docker: multi-stage image (Rust/Node build → nginx:alpine serve), 25.9MB final image
 - wasm-pack pinned via `cargo install wasm-pack@0.14.0 --locked`; Node 20 via NodeSource
 - nginx:alpine serves WASM with correct MIME type natively; gzip excludes WASM (pre-optimized)
+- GitHub Actions CI/CD: multi-platform builds (linux/amd64 + linux/arm64) on v* tag push
+- Docker Hub: fzoc/tic-tac-toe with semver tags (v1.3.0 → 1.3.0, 1.3, 1, latest) and OCI labels
+- Secure credentials via GitHub Secrets (DOCKERHUB_TOKEN) and Variables (DOCKERHUB_USERNAME)
 
 ## Constraints
 
@@ -128,13 +120,27 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ## Current State
 
-**Milestone v1.2 complete** (2026-04-14). Production Docker image ships the game:
+**Milestone v1.3 complete** (2026-04-25). Production-ready with full CI/CD pipeline:
+- GitHub Actions multi-platform Docker builds (linux/amd64 + linux/arm64) triggered on v* tags
+- Docker Hub publishing with semver tag automation (v1.3.0 → 1.3.0, 1.3, 1, latest)
+- OCI image labels (org.opencontainers.image.* annotations) attached via docker/metadata-action v5
+- Secure Docker Hub credentials management via GitHub Secrets (DOCKERHUB_TOKEN, DOCKERHUB_USERNAME)
+- README Releasing section with prerequisites, release process, and technical notes
+- Published to Docker Hub as fzoc/tic-tac-toe with full multi-arch support
+- 12 phases total, 13 plans complete, ~1,689 LOC game + Docker/nginx config + CI/CD
+
+<details>
+<summary>v1.2 state (2026-04-14)</summary>
+
+Production Docker image ships the game:
 - Multi-stage Dockerfile: Rust/Node build stage → nginx:alpine serve stage (25.9MB image)
 - wasm-pack 0.14.0 pinned via `cargo install --locked`; Node 20 via NodeSource
 - nginx: correct WASM MIME type, `Cache-Control: immutable` for assets, `no-cache` for index.html
 - gzip for HTML/CSS/JS (WASM excluded — pre-optimized), HEALTHCHECK on `/healthz`
 - README Quick Start (`docker build` + `docker run`) and nginx reverse proxy docs
 - 10 phases total, 11 plans complete, ~1,689 LOC game + Docker/nginx config
+
+</details>
 
 <details>
 <summary>v1.1 state (2026-04-13)</summary>
@@ -169,4 +175,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after v1.3 milestone started — CI/CD & Distribution*
+*Last updated: 2026-04-25 after v1.3 milestone completed — CI/CD & Distribution*
