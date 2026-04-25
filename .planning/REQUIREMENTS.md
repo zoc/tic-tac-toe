@@ -16,8 +16,8 @@ Automate multi-arch Docker image builds and publish to Docker Hub on release tag
 ### Distribution
 
 - [x] **DIST-01**: Images published to Docker Hub under user's repository — ✅ Validated Phase 11
-- [ ] **DIST-02**: Semver tags generated automatically (v1.3.0 → tags: 1.3.0, 1.3, 1, latest)
-- [ ] **DIST-03**: OCI image labels attached (org.opencontainers.image.* annotations)
+- [x] **DIST-02**: Semver tags generated automatically (v1.3.0 → tags: 1.3.0, 1.3, 1, latest) — ✅ Validated Phase 12
+- [x] **DIST-03**: OCI image labels attached (org.opencontainers.image.* annotations) — ✅ Validated Phase 12
 - [x] **DIST-04**: Docker Hub credentials securely managed via GitHub Secrets — ✅ Validated Phase 11
 
 ## Future Requirements
@@ -43,8 +43,8 @@ This section maps requirements to phases.
 | CICD-04 | 11 | ✅ Validated 2026-04-25 |
 | DIST-01 | 11 | ✅ Validated 2026-04-25 |
 | DIST-04 | 11 | ✅ Validated 2026-04-25 |
-| DIST-02 | 12 | Not started |
-| DIST-03 | 12 | Not started |
+| DIST-02 | 12 | ✅ Validated 2026-04-25 |
+| DIST-03 | 12 | ✅ Validated 2026-04-25 |
 
 ---
 *Created: 2026-04-25*
