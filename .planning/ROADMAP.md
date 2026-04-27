@@ -6,6 +6,7 @@
 - ✅ **v1.1 Polish & Feel** — Phases 4-8 (shipped 2026-04-13)
 - ✅ **v1.2 Docker Deployment** — Phases 9-10 (shipped 2026-04-14)
 - ✅ **v1.3 CI/CD & Distribution** — Phases 11-12 (shipped 2026-04-25)
+- 🚧 **v1.4 Difficulty Levels** — Phases 13-14 (in progress)
 
 ## Phases
 
@@ -53,8 +54,43 @@ See archive: `.planning/milestones/v1.3-ROADMAP.md`
 
 </details>
 
-## Summary
+### 🚧 v1.4 Difficulty Levels (In Progress)
 
-**All milestones complete!** Project has shipped v1.0 MVP, v1.1 Polish & Feel, v1.2 Docker Deployment, and v1.3 CI/CD & Distribution.
+**Milestone Goal:** Let the player choose how hard the computer plays, with the setting persisted across sessions.
 
-**Total:** 12 phases, 14 plans, 100% complete
+- [ ] **Phase 13: Rust AI Parameterization & WASM API** - Parameterize AI mistake rate by difficulty level and expose `set_difficulty(u8)` through the WASM boundary
+- [ ] **Phase 14: Difficulty UI & Persistence** - Add dropdown selector to the game UI, wire localStorage persistence, and integrate with game reset and thinking-delay guard
+
+## Phase Details
+
+### Phase 13: Rust AI Parameterization & WASM API
+**Goal**: The Rust AI accepts a runtime difficulty level and the WASM boundary exposes `set_difficulty(u8)` for JS to call
+**Depends on**: Nothing (Phase 12 complete)
+**Requirements**: AI-01, AI-02, AI-03, AI-04
+**Success Criteria** (what must be TRUE):
+  1. Calling `game.set_difficulty(0)` produces AI that loses frequently (Easy, ~65% mistake rate) in manual play
+  2. Calling `game.set_difficulty(1)` produces AI at the existing default skill level (Medium, ~25% mistake rate)
+  3. Calling `game.set_difficulty(2)` produces AI that wins or draws nearly every game (Hard, ~8% mistake rate)
+  4. Calling `game.set_difficulty(3)` produces AI that never loses — every game is a win or draw (Unbeatable, 0% mistake rate)
+  5. `wasm-pack build` completes with no errors and all existing Rust tests pass
+**Plans**: TBD
+
+### Phase 14: Difficulty UI & Persistence
+**Goal**: The player can pick a difficulty from a dropdown in the UI, the choice survives page refresh, and the dropdown stays disabled while the computer is thinking
+**Depends on**: Phase 13
+**Requirements**: UI-01, UI-02, UI-03, UI-04, UI-05
+**Success Criteria** (what must be TRUE):
+  1. A difficulty dropdown (Easy / Medium / Hard / Unbeatable) is visible in the game UI and can be changed before or after a game
+  2. Refreshing the page restores the previously selected difficulty (via `ttt-difficulty` localStorage key)
+  3. A player visiting for the first time sees Medium pre-selected
+  4. Changing the difficulty mid-game immediately resets the board so the new AI level applies from move one
+  5. The difficulty dropdown is disabled (non-interactive) while the computer is calculating its move
+**Plans**: TBD
+**UI hint**: yes
+
+## Progress
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 13. Rust AI Parameterization & WASM API | 0/TBD | Not started | - |
+| 14. Difficulty UI & Persistence | 0/TBD | Not started | - |
