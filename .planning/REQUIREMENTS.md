@@ -1,50 +1,71 @@
-# Requirements: v1.3 CI/CD & Distribution
+# Requirements: v1.4 Difficulty Levels
+
+**Defined:** 2026-04-27
+**Core Value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
 
 ## Milestone Goal
 
-Automate multi-arch Docker image builds and publish to Docker Hub on release tags.
+Let the player choose how hard the computer plays, with the setting persisted across sessions.
 
-## v1.3 Requirements
+## v1.4 Requirements
 
-### CI/CD Automation
+### Difficulty Levels (AI)
 
-- [x] **CICD-01**: GitHub Actions workflow triggers on git tag push (tags matching `v*`) — ✅ Validated Phase 11
-- [x] **CICD-02**: Workflow builds Docker image for linux/amd64 platform — ✅ Validated Phase 11
-- [x] **CICD-03**: Workflow builds Docker image for linux/arm64 platform — ✅ Validated Phase 11
-- [x] **CICD-04**: Multi-arch manifest created combining both platform images — ✅ Validated Phase 11
+- [ ] **AI-01**: User can play against Easy AI that makes frequent mistakes (~65% mistake rate) and is regularly beatable
+- [ ] **AI-02**: User can play against Medium AI that plays at the existing default skill level (~25% mistake rate)
+- [ ] **AI-03**: User can play against Hard AI that rarely makes mistakes (~8% mistake rate) and is challenging to beat
+- [ ] **AI-04**: User can play against Unbeatable AI with perfect minimax play (0% mistake rate) that never loses
 
-### Distribution
+### Difficulty Selector (UI)
 
-- [x] **DIST-01**: Images published to Docker Hub under user's repository — ✅ Validated Phase 11
-- [x] **DIST-02**: Semver tags generated automatically (v1.3.0 → tags: 1.3.0, 1.3, 1, latest) — ✅ Validated Phase 12
-- [x] **DIST-03**: OCI image labels attached (org.opencontainers.image.* annotations) — ✅ Validated Phase 12
-- [x] **DIST-04**: Docker Hub credentials securely managed via GitHub Secrets — ✅ Validated Phase 11
+- [ ] **UI-01**: User can select difficulty via a dropdown in the game UI before and after games
+- [ ] **UI-02**: Selected difficulty persists across page refreshes via localStorage (`ttt-difficulty` key)
+- [ ] **UI-03**: First visit defaults to Medium difficulty
+- [ ] **UI-04**: Changing difficulty resets the current game immediately
+- [ ] **UI-05**: Difficulty dropdown is disabled while the computer is thinking
 
 ## Future Requirements
 
-None identified — this milestone completes the core CI/CD pipeline.
+Features deferred beyond v1.4.
+
+### Difficulty
+
+- Per-difficulty score tracking (separate win/loss/draw tallies per level)
+- "You can only draw" indicator on Unbeatable difficulty
+- Animated difficulty change transition
 
 ## Out of Scope
 
-- **GitHub Container Registry (ghcr.io)** — Docker Hub only for v1.3; adding ghcr.io would double the matrix complexity with minimal value
-- **Automated testing in CI** — existing Docker build already validates the app compiles and runs; separate test jobs add latency with no new coverage
-- **Release notes automation** — manual release notes sufficient for low-frequency releases; automation overhead not justified
-- **Version bumping automation** — manual git tagging workflow is simple and explicit; tools like semantic-release add complexity for minimal benefit
+Explicitly excluded to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Per-difficulty score tracking | Adds complexity to localStorage schema; single shared score keeps existing behavior |
+| Unbeatable warning callout | User chose to let players discover it themselves |
+| Volume slider | Out of scope since v1.1 — binary mute is sufficient |
+| Multiplayer | Out of scope — single-player focus |
 
 ## Traceability
 
-This section maps requirements to phases.
+Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CICD-01 | 11 | ✅ Validated 2026-04-25 |
-| CICD-02 | 11 | ✅ Validated 2026-04-25 |
-| CICD-03 | 11 | ✅ Validated 2026-04-25 |
-| CICD-04 | 11 | ✅ Validated 2026-04-25 |
-| DIST-01 | 11 | ✅ Validated 2026-04-25 |
-| DIST-04 | 11 | ✅ Validated 2026-04-25 |
-| DIST-02 | 12 | ✅ Validated 2026-04-25 |
-| DIST-03 | 12 | ✅ Validated 2026-04-25 |
+| AI-01 | — | Pending |
+| AI-02 | — | Pending |
+| AI-03 | — | Pending |
+| AI-04 | — | Pending |
+| UI-01 | — | Pending |
+| UI-02 | — | Pending |
+| UI-03 | — | Pending |
+| UI-04 | — | Pending |
+| UI-05 | — | Pending |
+
+**Coverage:**
+- v1.4 requirements: 9 total
+- Mapped to phases: 0 (pending roadmap)
+- Unmapped: 9 ⚠️
 
 ---
-*Created: 2026-04-25*
+*Requirements defined: 2026-04-27*
+*Last updated: 2026-04-27 — initial v1.4 requirements*
