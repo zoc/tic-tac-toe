@@ -1,579 +1,400 @@
-# Architecture Research — Docker Multi-Arch Deployment
+# Architecture Research — Difficulty Levels Integration
 
-**Domain:** Static SPA (Rust/WASM + Vite) → Docker multi-platform image served by nginx
-**Milestone:** v1.2 Docker Deployment
-**Researched:** 2026-04-14
-**Confidence:** HIGH — all patterns verified from official Docker docs, GitHub Actions docs, nginx Docker Hub
-
----
-
-## Existing Project Structure
-
-```
-tic-tac-toe/
-├── Cargo.toml              # Rust crate — cdylib + rlib
-├── Cargo.lock
-├── package.json            # type: module; scripts: dev/build/preview
-├── package-lock.json
-├── vite.config.js          # wasm() plugin, build.target: 'esnext'
-├── index.html              # SPA entry; refs /src/main.js, /src/style.css
-├── src/                    # Rust + JS/CSS co-located
-│   ├── lib.rs              # wasm_bindgen exports
-│   ├── wasm_api.rs         # WASM boundary
-│   ├── ai.rs
-│   ├── board.rs
-│   ├── main.js             # ~400 LOC — DOM, events, WASM calls
-│   ├── audio.js            # Web Audio synthesizer module
-│   └── style.css           # ~449 LOC — dark/light theme, animations
-├── pkg/                    # ← wasm-pack output (GITIGNORED — built in Docker)
-│   └── tic_tac_toe*.{js,wasm,d.ts}
-├── dist/                   # ← Vite production build (GITIGNORED — built in Docker)
-│   ├── index.html
-│   └── assets/
-│       ├── index-*.js
-│       ├── index-*.css
-│       └── tic_tac_toe_bg-*.wasm   # Vite copies WASM into assets/
-├── target/                 # Rust build cache (GITIGNORED)
-└── node_modules/           # (GITIGNORED)
-```
-
-**Key observation:** `src/` is flat — Rust files and JS/CSS files coexist in the same directory.  
-The Vite `server.fs.allow: ['.']` config explicitly allows serving `pkg/` from the project root.
+**Domain:** Rust/WASM game engine + Vanilla JS frontend — parameterizing AI behavior across the WASM boundary
+**Milestone:** v1.4 Difficulty Levels
+**Researched:** 2026-04-27
+**Confidence:** HIGH — based on direct source inspection of the full codebase
 
 ---
 
-## Standard Architecture
-
-### System Overview
+## Existing System Map
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Docker Build Context                        │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  Stage 1: builder  (FROM rust:1-slim-bookworm)           │   │
-│  │                                                          │   │
-│  │  apt-get: curl, nodejs, npm                              │   │
-│  │  cargo install wasm-pack                                 │   │
-│  │  wasm-pack build --target web --release                  │   │
-│  │    → pkg/   (tic_tac_toe.js, tic_tac_toe_bg.wasm, ...)  │   │
-│  │  npm ci                                                  │   │
-│  │  npm run build   (vite build)                            │   │
-│  │    → dist/  (index.html, assets/*.{js,css,wasm})         │   │
-│  └──────────────────┬───────────────────────────────────────┘   │
-│                     │  COPY --from=builder /app/dist/           │
-│  ┌──────────────────▼───────────────────────────────────────┐   │
-│  │  Stage 2: runtime  (FROM nginx:alpine)                   │   │
-│  │                                                          │   │
-│  │  COPY nginx.conf → /etc/nginx/conf.d/default.conf        │   │
-│  │  COPY dist/     → /usr/share/nginx/html/                 │   │
-│  │  EXPOSE 80                                               │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  Multi-platform output: linux/amd64 + linux/arm64              │
-│  Via: docker buildx build --platform linux/amd64,linux/arm64   │
-│       (QEMU emulation on amd64 runner for arm64 target)        │
-└─────────────────────────────────────────────────────────────────┘
+src/board.rs          Game struct — cells, turn, status (no AI knowledge)
+src/ai.rs             get_computer_move(&Game) → Option<usize>
+                        └── MISTAKE_RATE: f64 = 0.25  ← HARD-CODED CONSTANT
+src/wasm_api.rs       WasmGame — wasm-bindgen exported struct
+                        └── computer_move(&mut self) → u8
+                              └── calls get_computer_move(&self.inner)  ← no rate param
+src/main.js           game.computer_move()  ← no difficulty context
+                        loadScore() / saveScore()  ← key: 'ttt-score'
 ```
 
-### Component Responsibilities
-
-| Component | Responsibility | Notes |
-|-----------|----------------|-------|
-| Stage 1: builder | Compile Rust→WASM; install JS deps; run Vite build | Rust + Node.js toolchain; discarded after build |
-| Stage 2: runtime | Serve static files via nginx | ~50MB final image (nginx:alpine base ~25MB + assets) |
-| nginx.conf | SPA routing (try_files), WASM MIME type, gzip | Custom config replaces nginx default |
-| GitHub Actions workflow | Tag-triggered build + push to Docker Hub | Uses QEMU + buildx for multi-arch |
-| .dockerignore | Exclude target/, node_modules/, pkg/, dist/ | Prevents cache-busting + reduces build context |
+The entire difficulty surface is one constant in `src/ai.rs`. Everything else is wiring.
 
 ---
 
-## Recommended Project Structure (New Files)
+## Recommended Architecture
 
-```
-tic-tac-toe/
-├── Dockerfile              # NEW — multi-stage build
-├── .dockerignore           # NEW — build context exclusions
-├── nginx.conf              # NEW — custom nginx server config
-└── .github/
-    └── workflows/
-        └── docker-publish.yml   # NEW — GitHub Actions CI/CD
-```
+### Design Decision: Where Difficulty Lives
 
-**All existing files remain unchanged.** No modifications to `Cargo.toml`, `vite.config.js`, `package.json`, `src/`, or `index.html`.
+Difficulty is a **session-level setting**, not a per-move setting. It is set once (on page load or dropdown change) and applies to all subsequent `computer_move()` calls until changed.
 
----
+**Two viable options:**
 
-## Architectural Patterns
+| Option | Where rate is stored | WASM boundary change |
+|--------|----------------------|----------------------|
+| A. Rate stored on WasmGame | `WasmGame` holds `mistake_rate: f64`; JS sets it once via `set_difficulty(u8)` | 1 new WASM method |
+| B. Rate passed per move call | `computer_move_with_rate(rate: f64)` — JS passes rate each call | 1 changed WASM method signature |
 
-### Pattern 1: Multi-Stage Dockerfile
-
-**What:** Two stages — `builder` (fat: Rust + Node.js) and `runtime` (lean: nginx:alpine). Only the `dist/` output is copied to runtime.
-
-**When to use:** Any static site with a heavy build toolchain.
-
-**Trade-offs:** Larger layer cache for builder stage (wasm-pack install is slow: ~3–5 min). Runtime image stays small (~50MB vs ~2GB builder).
-
-**Recommended Dockerfile:**
-
-```dockerfile
-# syntax=docker/dockerfile:1
-
-# ─── Stage 1: Build ────────────────────────────────────────────────────────────
-FROM rust:1-slim-bookworm AS builder
-
-WORKDIR /app
-
-# Install Node.js (LTS) and npm — needed for Vite build
-# Install curl for wasm-pack installer
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    nodejs \
-    npm \
-  && rm -rf /var/lib/apt/lists/*
-
-# Install wasm-pack
-# Using cargo install so the binary works for the builder's native arch
-RUN cargo install wasm-pack
-
-# Add WASM compilation target
-RUN rustup target add wasm32-unknown-unknown
-
-# Copy dependency manifests first (layer-cache optimization)
-COPY Cargo.toml Cargo.lock ./
-COPY package.json package-lock.json ./
-
-# Install JS dependencies (before copying source — cache-friendly)
-RUN npm ci
-
-# Copy all source files
-COPY src/ ./src/
-COPY index.html vite.config.js ./
-
-# Build WASM package (outputs to pkg/)
-RUN wasm-pack build --target web --release
-
-# Build frontend (Vite reads pkg/ via vite.config.js, outputs to dist/)
-RUN npm run build
-
-# ─── Stage 2: Runtime ──────────────────────────────────────────────────────────
-FROM nginx:alpine AS runtime
-
-# Custom nginx config: WASM MIME type + SPA routing
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy production build artifacts
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-EXPOSE 80
-```
-
-**Why `rust:1-slim-bookworm` not `rust:alpine`:**
-- wasm-pack's installer script and some crates need glibc (bookworm = Debian 12)
-- Alpine uses musl libc — can cause subtle linking issues with wasm-pack
-- `slim-bookworm` is the smaller Debian variant (~100MB vs 250MB full)
-- HIGH confidence: this is the community-recommended base for Rust Docker builds
-
-**Why not `--platform=$BUILDPLATFORM` cross-compilation:**
-- Rust→WASM compilation always targets `wasm32-unknown-unknown` — completely architecture-independent. The WASM binary is the same regardless of build platform.
-- The final artifact (HTML/CSS/JS/WASM) is architecture-neutral static content.
-- nginx:alpine is the only architecture-specific component — and Docker's multi-arch manifest handles that automatically.
-- QEMU emulation on the builder stage is fine because `wasm32-unknown-unknown` is compiled via cross-compilation anyway (not native arch).
-- **Simpler:** no `ARG TARGETPLATFORM` / `ARG BUILDPLATFORM` needed.
+**Recommendation: Option A** — store rate on `WasmGame`. Rationale:
+- Difficulty is session state, not per-move state. It belongs alongside the game instance.
+- JS only needs to call `set_difficulty(level)` once on change and once on init. No risk of forgetting to pass it on each `computer_move()` call.
+- Matches the existing pattern: JS holds a `game` object and calls methods on it.
+- `reset()` should NOT change difficulty — game resets, difficulty persists. Option A makes this natural (rate is a separate field from board state).
 
 ---
 
-### Pattern 2: nginx Configuration for SPA + WASM
+### Component Boundaries After Change
 
-**What:** nginx serving a Vite SPA with WASM MIME type and SPA fallback routing.
+| Component | Change | Details |
+|-----------|--------|---------|
+| `src/ai.rs` | MODIFIED | `get_computer_move` gains `mistake_rate: f64` parameter; `MISTAKE_RATE` constant removed |
+| `src/wasm_api.rs` | MODIFIED | `WasmGame` gains `mistake_rate: f64` field; new `set_difficulty(level: u8)` method; `computer_move()` passes rate to AI |
+| `src/main.js` | MODIFIED | Dropdown element queried; `loadDifficulty()` / `saveDifficulty()` helpers added; `set_difficulty()` called on init and on dropdown change; `resetGame()` updated to preserve difficulty |
+| `index.html` | MODIFIED | `<select id="difficulty">` dropdown added to UI |
+| `src/style.css` | MODIFIED | Dropdown styled to match dark/light theme |
 
-**When to use:** Any Vite-built SPA deployed via nginx.
+No new files required. No changes to `src/board.rs`, `Cargo.toml`, `vite.config.js`, `package.json`, `Dockerfile`, or CI workflow.
 
-**Required capabilities:**
-1. `application/wasm` MIME type for `.wasm` files — **critical**: without this, some browsers refuse WASM compilation with `TypeError: Response has unsupported MIME type`
-2. `try_files $uri $uri/ /index.html` — SPA routing fallback (for any client-side routes, though this app has only one route)
-3. Gzip compression — Vite's production build is already minified; gzip further reduces transfer
+---
 
-**Recommended `nginx.conf`:**
+### Data Flow: Difficulty Setting
 
-```nginx
-server {
-    listen 80;
-    server_name _;
+```
+Page load
+  ↓
+loadDifficulty()  →  localStorage.getItem('ttt-difficulty') || 'medium'
+  ↓
+difficultyEl.value = savedLevel
+  ↓
+game.set_difficulty(levelToU8(savedLevel))
+  ↓
+WasmGame.set_difficulty(level: u8)
+  ↓
+  match level {
+    0 => self.mistake_rate = 0.65,   // Easy
+    1 => self.mistake_rate = 0.25,   // Medium
+    2 => self.mistake_rate = 0.08,   // Hard
+    3 => self.mistake_rate = 0.0,    // Unbeatable
+    _ => self.mistake_rate = 0.25,   // fallback
+  }
+```
 
-    root /usr/share/nginx/html;
-    index index.html;
+```
+User changes dropdown
+  ↓
+difficultyEl.addEventListener('change', ...)
+  ↓
+saveDifficulty(newLevel)  →  localStorage.setItem('ttt-difficulty', newLevel)
+  ↓
+game.set_difficulty(levelToU8(newLevel))
+  (board state unchanged — only mistake_rate updates)
+```
 
-    # WASM MIME type — required for browser WASM compilation
-    # nginx:alpine includes this in the default mime.types, but explicit is safer
-    include /etc/nginx/mime.types;
-    types {
-        application/wasm wasm;
+```
+computer_move() call (unchanged JS call site)
+  ↓
+WasmGame.computer_move()  →  get_computer_move(&self.inner, self.mistake_rate)
+  ↓
+ai::get_computer_move(game, mistake_rate)
+  if rng.random_bool(mistake_rate) → random move
+  else → minimax optimal move
+```
+
+```
+resetGame() in JS
+  ↓
+  game.reset()          ← clears board (existing behavior)
+  (NO set_difficulty call — difficulty persists across games by design)
+```
+
+---
+
+### Data Flow: Score Persistence (Unchanged)
+
+Score uses `'ttt-score'` key. Difficulty uses `'ttt-difficulty'` key. They are independent. Score is shared across all difficulties — no per-difficulty split, consistent with milestone spec.
+
+```
+localStorage
+  'ttt-score'      → { wins: N, losses: N, draws: N }   (existing, unchanged)
+  'ttt-difficulty' → 'easy' | 'medium' | 'hard' | 'unbeatable'  (NEW)
+```
+
+---
+
+## Detailed Component Changes
+
+### 1. `src/ai.rs` — Parameterize mistake_rate
+
+**Change:** Remove `MISTAKE_RATE` constant. Add `mistake_rate: f64` parameter to `get_computer_move`.
+
+Before:
+```rust
+const MISTAKE_RATE: f64 = 0.25;
+
+pub fn get_computer_move(game: &Game) -> Option<usize> {
+    // ...
+    if rng.random_bool(MISTAKE_RATE) {
+```
+
+After:
+```rust
+pub fn get_computer_move(game: &Game, mistake_rate: f64) -> Option<usize> {
+    // ...
+    if rng.random_bool(mistake_rate) {
+```
+
+`minimax()` is unchanged. `check_winner()` is unchanged. Test suite must be updated: all `get_computer_move(&game)` calls become `get_computer_move(&game, 0.25)` to preserve existing behavior.
+
+The Unbeatable level passes `0.0` — `rng.random_bool(0.0)` always returns false in the `rand` crate, so minimax always runs. No special-casing needed.
+
+---
+
+### 2. `src/wasm_api.rs` — WasmGame gains difficulty state
+
+**Change:** Add `mistake_rate: f64` field to `WasmGame`. Add `set_difficulty(u8)` method. Update `computer_move()` to pass rate. `reset()` must NOT reset `mistake_rate`.
+
+Before:
+```rust
+pub struct WasmGame {
+    inner: Game,
+}
+
+impl WasmGame {
+    pub fn new() -> WasmGame {
+        WasmGame { inner: Game::new() }
     }
 
-    # SPA routing — serve index.html for all paths not matching a file
-    location / {
-        try_files $uri $uri/ /index.html;
+    pub fn computer_move(&mut self) -> u8 {
+        match get_computer_move(&self.inner) {
+```
+
+After:
+```rust
+pub struct WasmGame {
+    inner: Game,
+    mistake_rate: f64,
+}
+
+impl WasmGame {
+    pub fn new() -> WasmGame {
+        WasmGame {
+            inner: Game::new(),
+            mistake_rate: 0.25,   // default: Medium
+        }
     }
 
-    # Cache static assets aggressively (Vite content-hashes filenames)
-    location ~* \.(?:js|css|wasm|ico|png|svg)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
+    pub fn set_difficulty(&mut self, level: u8) {
+        self.mistake_rate = match level {
+            0 => 0.65,   // Easy
+            1 => 0.25,   // Medium
+            2 => 0.08,   // Hard
+            3 => 0.0,    // Unbeatable
+            _ => 0.25,   // fallback to Medium
+        };
     }
 
-    # Gzip for text assets
-    gzip on;
-    gzip_types text/plain text/css application/javascript application/wasm;
-    gzip_min_length 1024;
+    pub fn computer_move(&mut self) -> u8 {
+        match get_computer_move(&self.inner, self.mistake_rate) {
+```
 
-    # Security headers
-    add_header X-Content-Type-Options "nosniff";
-    add_header X-Frame-Options "DENY";
+`reset()` unchanged — `game.reset()` only resets `self.inner = Game::new()`, `mistake_rate` field is untouched.
+
+`set_difficulty` must have `#[wasm_bindgen]` annotation (it's part of `impl WasmGame` which is already `#[wasm_bindgen]`).
+
+---
+
+### 3. `src/main.js` — Difficulty persistence and wiring
+
+**New constants and DOM reference:**
+```js
+const DIFFICULTY_KEY = 'ttt-difficulty';
+const difficultyEl = document.getElementById('difficulty');
+```
+
+**New helpers:**
+```js
+function loadDifficulty() {
+  try {
+    return localStorage.getItem(DIFFICULTY_KEY) || 'medium';
+  } catch {
+    return 'medium';   // SecurityError in private browsing
+  }
+}
+
+function saveDifficulty(level) {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, level);
+  } catch {
+    // Storage unavailable — silently ignore
+  }
+}
+
+function levelToU8(level) {
+  return { easy: 0, medium: 1, hard: 2, unbeatable: 3 }[level] ?? 1;
 }
 ```
 
-**Why `include /etc/nginx/mime.types` + explicit `types { application/wasm wasm; }` block:**
-- The `nginx:alpine` image ships with `/etc/nginx/mime.types` which includes `application/wasm` as of nginx 1.25+
-- The explicit `types` block inside `server {}` is additive — it merges with the included mime.types
-- Being explicit prevents breakage if an older nginx base image is used
+**In `main()` after `game = new WasmGame()`:**
+```js
+const savedDifficulty = loadDifficulty();
+difficultyEl.value = savedDifficulty;
+game.set_difficulty(levelToU8(savedDifficulty));
 
-**WASM MIME type requirement — HIGH confidence:**
-- The Fetch spec requires `Content-Type: application/wasm` for `WebAssembly.instantiateStreaming()` to work
-- Without correct MIME type, browsers fall back to `WebAssembly.instantiate()` (non-streaming, slower) or throw a TypeError
-- Source: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/WebAssembly/instantiateStreaming
-
----
-
-### Pattern 3: docker buildx + QEMU for Multi-Arch
-
-**What:** Build `linux/amd64` and `linux/arm64` images from a single amd64 runner using QEMU CPU emulation.
-
-**When to use:** Multi-arch image publishing when native multi-arch runners are unavailable or unneeded.
-
-**How QEMU emulation works:**
-1. `docker/setup-qemu-action` installs QEMU binaries into the Docker daemon's VM via `tonistiigi/binfmt --install all`
-2. This registers QEMU as a `binfmt_misc` binary interpreter for non-native ELF formats
-3. When `docker buildx` builds for `linux/arm64` on an `amd64` runner, arm64 binaries are transparently executed through QEMU
-4. The `docker-container` buildx driver creates an isolated BuildKit container with QEMU support
-
-**Performance note:** QEMU emulation is 3–10× slower than native. For this project:
-- The `wasm-pack build` step compiles Rust to `wasm32-unknown-unknown` — this is a cross-compile regardless of host arch, so QEMU doesn't slow it down
-- The `npm run build` (Vite) is pure JS — QEMU doesn't affect it on arm64
-- Only `cargo install wasm-pack` (which installs a native binary for the target arch) is emulated — this is the slow step (~5 min under QEMU on arm64)
-- **Acceptable:** The total arm64 build time is ~8–12 min; amd64 is ~3–5 min. For a tag-triggered workflow, this is fine.
-
----
-
-### Pattern 4: GitHub Actions Tag-Triggered Workflow
-
-**What:** CI/CD workflow that builds and pushes the multi-arch image to Docker Hub only on git tag pushes matching `v*.*.*`.
-
-**When to use:** Release-gated deployments. Tags trigger Docker Hub pushes; branch pushes do not.
-
-**Recommended `.github/workflows/docker-publish.yml`:**
-
-```yaml
-name: Publish Docker image
-
-on:
-  push:
-    tags:
-      - "v*.*.*"
-
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.DOCKERHUB_USERNAME }}/tic-tac-toe
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest
-
-      - name: Build and push multi-arch image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+difficultyEl.addEventListener('change', () => {
+  const level = difficultyEl.value;
+  saveDifficulty(level);
+  game.set_difficulty(levelToU8(level));
+});
 ```
 
-**Secrets and variables needed:**
+**`resetGame()` — no change needed.** `game.reset()` only clears the board. `mistake_rate` on the WASM side is preserved. The dropdown value in the DOM is also preserved. No extra code required.
 
-| Secret/Variable | Type | Value | Purpose |
-|-----------------|------|-------|---------|
-| `DOCKERHUB_USERNAME` | Repository Variable (`vars.*`) | Docker Hub username | Image name prefix and login |
-| `DOCKERHUB_TOKEN` | Repository Secret (`secrets.*`) | Docker Hub access token | Authenticates pushes (not account password) |
-
-**Why use a Docker Hub access token, not account password:**
-- Docker Hub access tokens are scoped (read/write), revocable, and don't expose account credentials
-- Create at: hub.docker.com → Account Settings → Security → New Access Token
-
-**Tag output from `docker/metadata-action`:**
-Given tag `v1.2.0`, the action generates:
-- `username/tic-tac-toe:1.2.0`
-- `username/tic-tac-toe:1.2`
-- `username/tic-tac-toe:1`
-- `username/tic-tac-toe:latest`
-
-**GitHub Actions cache (`cache-from/cache-to: type=gha`):**
-- Caches BuildKit layers in GitHub Actions cache
-- Subsequent tag pushes reuse the `npm ci` and wasm-pack install layers if Cargo.lock/package-lock.json are unchanged
-- Reduces build time from ~10 min to ~3 min on cache hit
+**`loadScore()` / `saveScore()` — completely unchanged.** Different key, different object.
 
 ---
 
-## Data Flow: Build Pipeline
+### 4. `index.html` — Dropdown markup
 
-```
-git tag push v1.2.0
-    ↓
-GitHub Actions: ubuntu-latest runner
-    ↓
-actions/checkout@v4
-    → repository at GITHUB_WORKSPACE
-    ↓
-docker/setup-qemu-action@v4
-    → QEMU binfmt_misc registered for arm64, riscv64, etc.
-    ↓
-docker/setup-buildx-action@v4
-    → docker-container driver buildx builder created
-    ↓
-docker/login-action@v4
-    → authenticated to docker.io/DOCKERHUB_USERNAME
-    ↓
-docker/metadata-action@v6
-    → tags: ["user/tic-tac-toe:1.2.0", "...:1.2", "...:1", "...:latest"]
-    ↓
-docker/build-push-action@v7 (platforms: linux/amd64,linux/arm64)
-    ↓
-  ┌─ amd64 build ───────────────────────────────────┐
-  │  Stage 1 (builder / native amd64):              │
-  │    apt-get: curl, nodejs, npm                   │
-  │    cargo install wasm-pack          ~2 min      │
-  │    rustup target add wasm32         ~10s        │
-  │    npm ci                           ~30s        │
-  │    wasm-pack build --release        ~90s        │
-  │    npm run build (vite)             ~10s        │
-  │  Stage 2 (runtime / nginx:alpine amd64):        │
-  │    COPY nginx.conf + dist/          ~1s         │
-  └─────────────────────────────────────────────────┘
-  ┌─ arm64 build ───────────────────────────────────┐
-  │  Stage 1 (builder / arm64 via QEMU):            │
-  │    apt-get: curl, nodejs, npm       ~3 min      │
-  │    cargo install wasm-pack          ~8 min (QEMU slow)│
-  │    wasm-pack build --release        ~3 min (cross-compile, same output)│
-  │    npm run build (vite)             ~15s        │
-  │  Stage 2 (runtime / nginx:alpine arm64):        │
-  │    COPY nginx.conf + dist/          ~1s         │
-  └─────────────────────────────────────────────────┘
-    ↓
-  Multi-arch manifest list pushed to Docker Hub
-  docker.io/user/tic-tac-toe:1.2.0 → {amd64: sha256:..., arm64: sha256:...}
+Add a `<select>` near the top controls area (alongside mute button). The exact position depends on existing HTML structure, but the element must have `id="difficulty"` and four `<option>` values matching the JS level strings:
+
+```html
+<select id="difficulty" aria-label="Difficulty">
+  <option value="easy">Easy</option>
+  <option value="medium" selected>Medium</option>
+  <option value="hard">Hard</option>
+  <option value="unbeatable">Unbeatable</option>
+</select>
 ```
 
-**Key insight:** The `dist/` output (HTML/CSS/JS/WASM) is **identical** for both architectures — WASM is arch-neutral and Vite produces pure JS. Only the nginx binary in the runtime stage differs. Both builds run in parallel by buildx.
+The `selected` attribute on `medium` is a fallback for when JS hasn't run yet. JS immediately overwrites `difficultyEl.value` from localStorage on init.
 
 ---
 
-## File Details: `.dockerignore`
+### 5. `src/style.css` — Dropdown styling
+
+The dropdown must follow the existing dark/light theming (CSS `prefers-color-scheme` variables already in `style.css`). Key rules needed:
+- Remove default `<select>` browser chrome (or harmonize it)
+- Match the button/control visual style — same border radius, font, color scheme as other controls
+- Ensure it does not flash unstyled before the stylesheet loads (already handled by existing FOUC prevention pattern)
+
+---
+
+## Build Order for Implementation
+
+Dependencies flow in one direction only:
 
 ```
-# Rust build cache — large (can be gigabytes), not needed in build context
-target/
-
-# Node.js dependencies — will be reinstalled by npm ci
-node_modules/
-
-# Generated by wasm-pack — will be regenerated by wasm-pack build
-pkg/
-
-# Vite production build — will be regenerated by npm run build
-dist/
-
-# Git history — not needed
-.git/
-.gitignore
-
-# Planning and documentation
-.planning/
-AGENTS.md
-
-# macOS artifacts
-.DS_Store
-
-# Editor config
-.vscode/
-.idea/
+1. src/ai.rs           — add mistake_rate param  (no deps on other changes)
+2. src/wasm_api.rs     — add field, set_difficulty(), update computer_move()
+                          (depends on: ai.rs change)
+3. src/ai.rs tests     — update get_computer_move() call sites in test suite
+                          (depends on: ai.rs signature change)
+4. index.html          — add <select id="difficulty">
+                          (independent of Rust changes)
+5. src/style.css       — style the dropdown
+                          (depends on: index.html having the element)
+6. src/main.js         — wire difficulty persistence and set_difficulty()
+                          (depends on: wasm_api.rs compiled pkg/ available;
+                           index.html having difficulty element)
 ```
 
-**Why `target/` is critical to exclude:** Rust's build cache (`target/`) can exceed 1–3GB. Including it bloats the build context transfer from host to Docker daemon significantly, adding minutes to every `docker build` invocation.
+wasm-pack rebuild is required after steps 1–3 before JS changes can be tested. During development, the usual flow is: `wasm-pack build --target web` then `npm run dev`.
 
 ---
 
-## Integration Points
+## Integration Points Summary
 
-### New Files to Create
+### New vs Modified
 
-| File | New/Modified | Description |
-|------|-------------|-------------|
-| `Dockerfile` | **NEW** | Multi-stage: `rust:1-slim-bookworm` builder → `nginx:alpine` runtime |
-| `.dockerignore` | **NEW** | Excludes target/, node_modules/, pkg/, dist/, .git/ |
-| `nginx.conf` | **NEW** | SPA routing, WASM MIME type, gzip, 1y cache headers |
-| `.github/workflows/docker-publish.yml` | **NEW** | Tag-triggered build+push to Docker Hub |
-
-### Unchanged Files
-
-| File | Why Unchanged |
-|------|--------------|
-| `Cargo.toml` | No new Rust dependencies |
-| `vite.config.js` | Vite config is already correct for production builds |
-| `package.json` | `npm run build` script already calls `vite build` |
-| `src/*.{rs,js,css}` | Game logic and frontend untouched |
-| `index.html` | HTML entry point unchanged |
-
-### Internal Boundaries
-
-| Boundary | Communication | Notes |
-|----------|---------------|-------|
-| Dockerfile Stage 1 → Stage 2 | `COPY --from=builder /app/dist /usr/share/nginx/html` | Only `dist/` crosses the stage boundary |
-| wasm-pack → Vite | `pkg/` directory at project root | Vite imports `./pkg/tic_tac_toe.js` via `src/main.js`; `vite build` bundles it |
-| GitHub Actions → Docker Hub | `docker/build-push-action` with `push: true` | Authenticated via `DOCKERHUB_TOKEN` secret |
+| File | Status | What Changes |
+|------|--------|-------------|
+| `src/ai.rs` | MODIFIED | `get_computer_move` signature: adds `mistake_rate: f64` param; constant removed |
+| `src/wasm_api.rs` | MODIFIED | `WasmGame` struct: `mistake_rate` field; `new()` default 0.25; `set_difficulty(u8)` method; `computer_move()` passes rate |
+| `src/main.js` | MODIFIED | `DIFFICULTY_KEY` constant; `difficultyEl` DOM ref; `loadDifficulty/saveDifficulty/levelToU8` helpers; `set_difficulty` wired on init and on change event |
+| `index.html` | MODIFIED | `<select id="difficulty">` with 4 options added |
+| `src/style.css` | MODIFIED | Dropdown styled to match theme |
+| `src/board.rs` | UNCHANGED | No AI knowledge; Game struct unaffected |
+| `src/lib.rs` | UNCHANGED | Module declarations unaffected |
+| `Cargo.toml` | UNCHANGED | No new dependencies |
+| `vite.config.js` | UNCHANGED | Build configuration unaffected |
+| `package.json` | UNCHANGED | No new JS dependencies |
+| `Dockerfile` | UNCHANGED | Build pipeline unaffected |
+| `.github/workflows/` | UNCHANGED | CI/CD unaffected |
 
 ---
 
-## Build Order
+## WASM Boundary Constraints
 
-```
-Stage 1 (builder):
-  1. apt-get install curl nodejs npm       # System deps
-  2. cargo install wasm-pack               # WASM toolchain
-  3. rustup target add wasm32-unknown-unknown
-  4. npm ci                                # JS deps (package-lock.json)
-  5. COPY src/ index.html vite.config.js   # Source files
-  6. wasm-pack build --target web --release → pkg/
-  7. npm run build                         → dist/
+All types crossing the `#[wasm_bindgen]` boundary must be scalar or JS-representable. The new `set_difficulty(level: u8)` uses `u8` — a scalar type that crosses cleanly, consistent with the existing boundary pattern (`make_move(usize)`, `computer_move() → u8`, etc.).
 
-Stage 2 (runtime):
-  8. COPY nginx.conf
-  9. COPY --from=builder /app/dist/ → /usr/share/nginx/html/
-```
-
-**Why this order matters:**
-- Steps 1–3 are toolchain setup — cached until base image changes
-- Step 4 (`npm ci`) is cached until `package-lock.json` changes
-- Steps 5–7 invalidate cache on any source file change (intentional)
-- wasm-pack (step 6) **must** run before Vite (step 7) — Vite's `vite-plugin-wasm` imports `pkg/tic_tac_toe.js`; if `pkg/` doesn't exist, `npm run build` fails with module resolution error
-
-**Cache optimization note:** Separating `COPY Cargo.toml Cargo.lock ./` and `COPY package.json package-lock.json ./` before `npm ci` enables caching JS deps independently of source changes. However, Rust dependency pre-caching (via `cargo fetch` or dummy `lib.rs`) is complex and not worth adding — wasm-pack already builds incrementally with the `target/` cache during local dev; in Docker, `target/` is rebuilt fresh each time (or restored via GHA cache).
+`mistake_rate: f64` is an internal field — it never crosses the boundary directly. JS only sends a level index (0–3), never a raw float. This is intentional: the difficulty-to-rate mapping is an AI implementation detail that belongs in Rust, not in JS.
 
 ---
 
-## Scaling Considerations
+## localStorage Key Naming
 
-This is a static site. Scaling is handled entirely at the infrastructure level, not the application level.
+| Key | Value type | Default | Notes |
+|-----|-----------|---------|-------|
+| `'ttt-score'` | JSON `{ wins, losses, draws }` | `{ wins: 0, losses: 0, draws: 0 }` | Existing, unchanged |
+| `'ttt-difficulty'` | String | `'medium'` | New; string not integer — human-readable, forward-compatible |
 
-| Scale | Approach |
-|-------|----------|
-| Single server | `docker run -p 80:80 user/tic-tac-toe:latest` — nginx handles thousands of concurrent static file requests |
-| Multi-server | Place nginx behind a load balancer; no sticky sessions needed (stateless SPA) |
-| CDN | Put CloudFlare/CloudFront in front; the Docker image serves as origin |
-| Kubernetes | Standard nginx deployment — Deployment + Service + Ingress |
-
----
-
-## Anti-Patterns
-
-### Anti-Pattern 1: Missing `application/wasm` MIME Type
-
-**What people do:** Use `nginx:alpine` with its default config and no custom `nginx.conf`.
-
-**Why it's wrong:** nginx's default `mime.types` may not include `application/wasm` on older versions. Browsers enforce MIME type checking for WASM modules loaded via `WebAssembly.instantiateStreaming()`. A missing or incorrect MIME type produces: `TypeError: Failed to execute 'compile' on 'WebAssembly': Incorrect response MIME type. Expected 'application/wasm'.`
-
-**Do this instead:** Always include explicit `types { application/wasm wasm; }` in `nginx.conf`.
+Using a string value (`'easy'`, `'medium'`, `'hard'`, `'unbeatable'`) rather than an integer ensures:
+- The `<select>` value and localStorage value are the same string — no conversion needed when restoring DOM state (`difficultyEl.value = savedDifficulty` just works)
+- Forward-compatible if level names change (versus opaque integers)
+- Human-readable in DevTools
 
 ---
 
-### Anti-Pattern 2: Copying All Source Into Runtime Stage
+## Anti-Patterns to Avoid
 
-**What people do:** Single-stage Dockerfile where Rust, npm, and source files all end up in the final image.
+### Anti-Pattern 1: Resetting difficulty on game reset
 
-**Why it's wrong:** Final image is ~2GB (full Rust toolchain + node_modules). Takes 5–10 minutes to pull on first `docker run`. Vastly increases attack surface.
+**What goes wrong:** Calling `game.set_difficulty(levelToU8(difficultyEl.value))` inside `resetGame()`.
 
-**Do this instead:** Multi-stage build. Final image is nginx:alpine + static files only (~50MB).
+**Why:** Redundant — difficulty is already set on the WasmGame and the dropdown hasn't changed. More importantly, it couples game reset logic to difficulty logic unnecessarily.
 
----
-
-### Anti-Pattern 3: Running `wasm-pack` After `npm ci` Without Copying Source
-
-**What people do:** `COPY . .` at the top of the Dockerfile (before `npm ci`) to ensure all files are present.
-
-**Why it's wrong:** Any change to any source file invalidates the Docker layer cache at the `COPY . .` point, causing `npm ci` to re-run even if `package-lock.json` hasn't changed. For a project with 200+ npm dependencies, this adds 30–90 seconds per build.
-
-**Do this instead:** Structured copy order:
-1. `COPY Cargo.toml Cargo.lock ./` (Rust manifest)
-2. `COPY package.json package-lock.json ./` (JS manifest)
-3. `RUN npm ci` (cached until package-lock.json changes)
-4. `COPY src/ index.html vite.config.js ./` (source — invalidates at this point)
-5. `RUN wasm-pack build && npm run build` (always re-runs on source change)
+**Do this instead:** Leave `resetGame()` untouched. The `mistake_rate` field on `WasmGame` persists through `reset()` because `reset()` only reassigns `self.inner`.
 
 ---
 
-### Anti-Pattern 4: Using `--no-cache` in wasm-pack build
+### Anti-Pattern 2: Splitting score by difficulty
 
-**What people do:** `wasm-pack build --no-cache --target web --release` to force a clean build.
+**What goes wrong:** Using `'ttt-score-easy'`, `'ttt-score-medium'` etc. as localStorage keys.
 
-**Why it's wrong:** wasm-pack's `--no-cache` flag clears the wasm-bindgen download cache. In a fresh Docker layer, the cache is already empty. The flag adds no correctness benefit and downloads wasm-bindgen-cli again unnecessarily (~30s).
+**Why:** Milestone spec explicitly requires a single shared score tally across all difficulties. Per-difficulty scores fragment the leaderboard and require UI changes (which score to show?). The shared score preserves the existing `saveScore()` / `loadScore()` logic without any modification.
 
-**Do this instead:** `wasm-pack build --target web --release` — no `--no-cache` flag.
+**Do this instead:** Keep `'ttt-score'` as-is. One score object, all difficulties contribute to it.
 
 ---
 
-### Anti-Pattern 5: Hardcoding Docker Hub Username in Workflow
+### Anti-Pattern 3: Passing mistake_rate from JS as a float
 
-**What people do:** `tags: myusername/tic-tac-toe:latest` directly in the YAML file.
+**What goes wrong:** Exposing a `set_mistake_rate(rate: f64)` method on `WasmGame` and having JS compute the rate.
 
-**Why it's wrong:** Username is committed to public source; harder to fork and reuse; requires changing the YAML to rename the image.
+**Why:** Leaks AI implementation details into JS. JS would need to know that Easy = 0.65, Hard = 0.08, etc. If rates are tuned later, both Rust and JS must be updated. The boundary is harder to type-check (f64 can be any float; a u8 level is bounded 0–3).
 
-**Do this instead:** Use `${{ vars.DOCKERHUB_USERNAME }}` (repository variable, not secret) — readable in logs, not sensitive, easy to configure per-repo.
+**Do this instead:** JS sends a level index (0–3). The Rust `set_difficulty(u8)` owns the rate mapping.
+
+---
+
+### Anti-Pattern 4: Disabling difficulty dropdown during computer turn
+
+**What goes wrong:** Hiding or disabling the `<select>` when `boardEl.classList.contains('board--disabled')`.
+
+**Why complex:** The board is disabled during the computer's thinking delay AND after game over. If difficulty is changed during the delay, it takes effect on the very next `game.set_difficulty()` call — which is fine, since `set_difficulty` only updates a float field, it doesn't affect an already-dispatched timer. The next game will use the new difficulty automatically.
+
+**Do this instead:** Leave the dropdown always enabled. Difficulty changes mid-game are safe and take effect on the next `computer_move()` call.
 
 ---
 
 ## Sources
 
-- Docker official docs: Multi-platform builds — https://docs.docker.com/build/building/multi-platform/ (HIGH confidence)
-- Docker official docs: GitHub Actions multi-platform — https://docs.docker.com/build/ci/github-actions/multi-platform/ (HIGH confidence)
-- Docker official docs: Manage tags and labels — https://docs.docker.com/build/ci/github-actions/manage-tags-labels/ (HIGH confidence)
-- Docker Hub: nginx official image — https://hub.docker.com/_/nginx — nginx 1.29.8-alpine, architectures confirmed: amd64, arm64v8 (HIGH confidence)
-- nginx docs: `ngx_http_core_module` types directive — https://nginx.org/en/docs/http/ngx_http_core_module.html#types (HIGH confidence)
-- Direct project inspection: `vite.config.js`, `package.json`, `Cargo.toml`, `src/` structure (HIGH confidence — primary source)
+- Direct source inspection: `src/ai.rs`, `src/wasm_api.rs`, `src/main.js`, `src/board.rs` (HIGH confidence — primary sources)
+- wasm-bindgen scalar type rules: u8, usize, f64 all cross the boundary cleanly; confirmed by existing usage in wasm_api.rs (HIGH confidence)
+- rand crate: `rng.random_bool(0.0)` → always false (probability 0.0 never fires); `rng.random_bool(1.0)` → always true — standard behavior for all probability distributions in the rand crate (HIGH confidence)
 
 ---
-*Architecture research for: Docker multi-arch deployment of Rust/WASM + Vite SPA*
-*Researched: 2026-04-14*
+*Architecture research for: v1.4 Difficulty Levels — Rust/WASM + Vanilla JS integration*
+*Researched: 2026-04-27*

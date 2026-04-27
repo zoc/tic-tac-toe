@@ -1,628 +1,463 @@
-# Domain Pitfalls — v1.2 Docker Multi-Arch Deployment
+# Pitfalls Research — v1.4 Difficulty Levels
 
-**Domain:** Docker multi-architecture deployment — Rust/WASM + Vite static site containerization
-**Codebase:** Existing Rust/wasm-pack + Vite 8 + vanilla JS/CSS game, adding Docker packaging
-**Researched:** 2026-04-14
-**Confidence:** HIGH — Docker official docs + GitHub Actions official docs + MDN (WASM MIME) + direct codebase inspection
+**Domain:** Adding difficulty levels to a browser-based Rust/WASM game
+**Codebase:** Rust/wasm-pack + Vite 8 + vanilla JS/CSS — existing `WasmGame` struct, `MISTAKE_RATE` const in `src/ai.rs`, `computer_move()` in `wasm_api.rs`
+**Researched:** 2026-04-27
+**Confidence:** HIGH — wasm-bindgen official docs (Context7) + direct codebase inspection + wasm-bindgen number coercion spec
 
 ---
 
 ## Context: Why This Document Exists
 
-v1.1 PITFALLS covers browser-side polish (Web Audio, CSS animations, localStorage, dark mode).
-This document covers the **Docker deployment** pitfalls specific to packaging a Rust/WASM + Vite
-static site as a multi-architecture container image.
+v1.2 PITFALLS covers Docker multi-arch deployment.
+v1.1 PITFALLS covers browser-side polish (animations, audio, localStorage, dark mode).
 
-This is not a generic Docker guide. Every pitfall here is specific to one or more of:
-- Rust + Node.js **dual ecosystem** in the same Dockerfile
-- `wasm-pack` compilation behavior inside Docker (especially under QEMU/arm64 emulation)
-- Vite's WASM output bundle and how nginx must serve it
-- Multi-arch buildx setup in GitHub Actions with tag-on-push workflows
-- Docker Hub credential handling and `.dockerignore` for a Rust+Node project
+This document covers pitfalls specific to **adding parameterized difficulty levels** to the existing
+Rust/WASM game engine — specifically:
+
+- Changing `const MISTAKE_RATE` from a compile-time constant to a runtime parameter
+- Passing the difficulty value across the WASM boundary via wasm-bindgen
+- Preventing mid-game difficulty changes from corrupting game state
+- Integrating a difficulty dropdown into the existing JS game flow
+- Persisting difficulty preference to localStorage alongside the existing score key
+
+Every pitfall here is specific to this codebase and this change.
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that produce broken images, failed builds, or silent serving errors.
-
 ---
 
-### Pitfall 1: QEMU Emulation Makes `wasm-pack build` Catastrophically Slow (or Hang)
+### Pitfall 1: JavaScript Number to Rust u8 Wraps on Out-of-Range Values
 
 **What goes wrong:**
-Building `linux/arm64` via QEMU emulation on a `linux/amd64` GitHub Actions runner compiles
-Rust under full software CPU emulation. `wasm-pack build` involves:
-1. `cargo` dependency resolution and compilation (many crates)
-2. `wasm-bindgen-cli` code generation
-3. `wasm-opt` binary optimizer pass (runs native arm64 binary under QEMU)
+`computer_move()` currently takes no arguments. When adding a `u8 difficulty` parameter (or
+making `MISTAKE_RATE` a method parameter), JavaScript passes a `Number`. wasm-bindgen's
+conversion rule for `Number → u8` is:
 
-For non-trivial Rust projects, the QEMU-emulated Rust compile is **10–30× slower** than native.
-The wasm-opt pass in particular can stall for 5+ minutes on a 33KB `.wasm` binary under emulation.
-GitHub Actions jobs time out after 6 hours by default, but some teams set shorter limits.
+- `NaN`, `Infinity`, `-Infinity` → **0**
+- Numbers outside 0–255 → **wrap** (e.g., `256` → `0`, `300` → `44`)
 
-**Why it happens:**
-QEMU is software CPU emulation — every x86 instruction executed for arm64 is individually translated.
-Rust compilation is CPU-intensive. Docker docs explicitly warn: *"Emulation with QEMU can be much
-slower than native builds, especially for compute-heavy tasks like compilation."*
-
-**How to avoid:**
-Use the `--platform=$BUILDPLATFORM` trick to run the Rust **build stage** on the native runner
-architecture (`linux/amd64`), cross-compiling only the **output** to `wasm32-unknown-unknown`:
-
-```dockerfile
-# Build stage always runs on the runner's native platform
-FROM --platform=$BUILDPLATFORM rust:slim AS build
-
-# wasm32 target is platform-independent — the WASM binary is the same on amd64 and arm64
-RUN rustup target add wasm32-unknown-unknown
-RUN cargo install wasm-pack
-COPY . .
-RUN wasm-pack build --target web --release
-
-RUN npm ci
-RUN npm run build
-# dist/ now contains the .wasm and all assets
-
-# Serve stage runs on the target platform (nginx:alpine is multi-arch)
-FROM --platform=$TARGETPLATFORM nginx:alpine AS serve
-COPY --from=build /app/dist /usr/share/nginx/html
-```
-
-**Key insight:** WebAssembly is platform-neutral bytecode. A `.wasm` file compiled on `linux/amd64`
-is **identical** to one compiled on `linux/arm64`. The `wasm32-unknown-unknown` target doesn't
-know or care about the host architecture. There is zero reason to compile Rust under QEMU for the
-arm64 image — the build stage output is the same either way.
-
-The nginx **serve stage** is multi-arch because `nginx:alpine` has native arm64 and amd64 layers.
-`COPY --from=build` carries the identical static files into the correct arch-specific nginx layer.
-
-**Warning signs:**
-- Build for `linux/arm64` takes >5 minutes while `linux/amd64` takes <1 minute
-- Build logs show `[linux/arm64 build...]` running full cargo compilation
-- `wasm-opt` step appears twice in build logs (once per platform)
-
-**Phase to address:** Dockerfile creation phase — use `--platform=$BUILDPLATFORM` on the build
-stage from the first line of the Dockerfile. Never patch this in after a slow build.
-
----
-
-### Pitfall 2: Missing `application/wasm` MIME Type Causes Browser Rejection of `.wasm` Files
-
-**What goes wrong:**
-When nginx serves `tic_tac_toe_bg-BSmjV6BP.wasm`, it must send the response header:
-```
-Content-Type: application/wasm
-```
-
-If it sends `application/octet-stream` (the default fallback for unknown extensions), the browser
-will **reject** the WASM module with a console error like:
-```
-WebAssembly.compileStreaming(): Response has unsupported MIME type 'application/octet-stream'
-expected 'application/wasm'
-```
-
-This means the compiled game engine fails to load silently in production. The JS error handler
-(`main().catch(...)`) will catch it, but the user sees a broken page.
+If the JS side passes a dropdown string value that wasn't parsed — `game.computer_move("medium")`
+— JavaScript coerces `"medium"` to `NaN`, which becomes `0` in Rust. If `0` maps to the hardest
+or softest difficulty unintentionally, the game silently plays at the wrong level with no error.
 
 **Why it happens:**
-`nginx:alpine`'s default `mime.types` file **does include** `application/wasm wasm;` in recent
-versions (nginx ≥ 1.11.4, 2017+). However:
-1. The default `mime.types` is only loaded if your `nginx.conf` includes `include mime.types;`
-2. If you write a custom `nginx.conf` that omits the `include` directive, WASM gets no MIME type
-3. The `default_type application/octet-stream;` fallback kicks in silently
+Developers expect Rust's type system to protect against invalid inputs at the boundary. It does
+not. wasm-bindgen performs a silent coercion — no panic, no exception, just a wrong value.
+The generated glue code calls `Math.trunc` and applies masking, so all JS numbers are valid at
+the boundary level; Rust just receives an unexpected value.
 
 **How to avoid:**
-Always verify the MIME type is set correctly. In your nginx config:
-```nginx
-http {
-    include       /etc/nginx/mime.types;    # REQUIRED — includes application/wasm
-    default_type  application/octet-stream;
-    ...
+1. Validate on the JavaScript side before calling into WASM: parse the dropdown value to an integer
+   and range-check it (`if (isNaN(level) || level < 0 || level > 3) throw ...`).
+2. In Rust, add a guard in the method that receives the difficulty parameter: clamp the value to
+   the valid range and use a match-with-default that converts unknown values to a safe fallback
+   (e.g., Medium):
+
+```rust
+pub fn computer_move(&mut self, difficulty: u8) -> u8 {
+    let rate = match difficulty {
+        0 => 0.75, // Easy
+        1 => 0.40, // Medium
+        2 => 0.15, // Hard
+        _ => 0.0,  // Unbeatable — also handles any wrapped/unexpected value
+    };
+    // ...
 }
 ```
 
-And optionally add an explicit override as belt-and-suspenders:
-```nginx
-location ~* \.wasm$ {
-    add_header Content-Type application/wasm;
-    # Also add CORS if needed (see Pitfall 3)
+3. Never pass the raw dropdown `.value` string directly to a Rust function expecting a number.
+
+**Warning signs:**
+- AI plays at unexpectedly easy or hard level when dropdown shows a specific setting
+- Difficulty level appears correct in the UI but the AI behavior does not match
+- No console errors despite wrong behavior — the silent coercion hides the bug
+
+**Phase to address:** Rust AI parameterization phase — guard the parameter in Rust at the point
+where the difficulty is consumed. Validate on the JS side at the call site in the same phase.
+
+---
+
+### Pitfall 2: f64 Mistake Rate Passed Directly Across WASM Boundary Instead of Discrete Levels
+
+**What goes wrong:**
+The tempting approach is to expose `mistake_rate: f64` directly across the WASM boundary so the
+JS side can pass `0.75` (Easy) or `0.0` (Unbeatable). This creates several problems:
+
+1. **No validation at the boundary**: JS can pass `-0.5`, `2.0`, or `NaN`. `NaN` in Rust's
+   `rand::rng().random_bool(NaN)` behavior is undefined (the `random_bool` function in the `rand`
+   crate requires a value in `[0.0, 1.0]`; passing NaN will panic via debug assertions or produce
+   incorrect behavior in release builds).
+2. **Floating-point precision**: `0.1 + 0.2` is not `0.3` in JavaScript. If JS constructs the
+   mistake rate arithmetically, the value arriving in Rust may not be what was intended.
+3. **Coupling**: The JS side now owns the difficulty-to-mistake-rate mapping. If mistake rates are
+   tuned in the future, the JS side must change too.
+
+**Why it happens:**
+`MISTAKE_RATE` is already a `f64` in `src/ai.rs`. The reflex is to expose it directly as a
+parameter. A `u8` level that maps internally to `f64` seems like an unnecessary layer.
+
+**How to avoid:**
+Pass a `u8` level index across the boundary (0=Easy, 1=Medium, 2=Hard, 3=Unbeatable). Map to
+`f64` mistake rates inside Rust, in one place. The JS side only knows level integers — it never
+touches floating-point rates. This keeps the tuning logic in Rust.
+
+```rust
+fn mistake_rate_for_level(level: u8) -> f64 {
+    match level {
+        0 => 0.75,  // Easy: mostly random
+        1 => 0.40,  // Medium: current ~25% → bump to 40% for "Medium"
+        2 => 0.15,  // Hard: rarely mistakes
+        _ => 0.0,   // Unbeatable: perfect minimax always
+    }
 }
 ```
 
 **Warning signs:**
-- Chrome DevTools Network tab shows `tic_tac_toe_bg-*.wasm` with `Content-Type: application/octet-stream`
-- Console error: `WebAssembly.compileStreaming(): Response has unsupported MIME type`
-- The `.wasm` request succeeds (200 OK) but the game fails to initialize — misleading
+- Method signature in `wasm_api.rs` shows `f64` parameter named `mistake_rate`
+- JavaScript constructs the rate as `difficulty * 0.25` or similar arithmetic
+- Different browsers produce slightly different AI behaviors (floating-point divergence)
 
-**Phase to address:** nginx configuration phase — always `include mime.types` first; verify in
-final container smoke test with `curl -I http://localhost/assets/*.wasm`.
+**Phase to address:** Rust AI parameterization phase — decision must be made before writing
+any WASM API changes.
 
 ---
 
-### Pitfall 3: nginx Missing CORS Headers for WASM `instantiateStreaming()` Cross-Origin Scenarios
+### Pitfall 3: Mid-Game Difficulty Change Corrupts Game State
 
 **What goes wrong:**
-`WebAssembly.instantiateStreaming()` requires the server to respond with the correct MIME type
-AND (if the page and WASM file are on different origins) proper CORS headers. For the Docker
-container serving everything on the same origin, CORS is not required. But if the image is later
-deployed behind a CDN or if the WASM assets are served from a different subdomain, the lack of
-CORS headers will cause `instantiateStreaming()` to fail even with the correct MIME type.
-
-Additionally: some security scanners flag missing `Cross-Origin-Embedder-Policy` (COEP) and
-`Cross-Origin-Opener-Policy` (COOP) headers, which are required for `SharedArrayBuffer` but also
-sometimes required by hosting platforms' security policies.
+If the difficulty dropdown is enabled while a game is in progress and the player changes it,
+the AI will use the new difficulty for its next move. This is subtle corruption: the game started
+with Hard AI but the player switches to Easy after they're losing, getting an easier opponent
+mid-game. Worse, the `thinkingTimer` scenario: the player changes difficulty after clicking a
+cell but during the 300–800ms thinking delay. The computer's move will execute with the new rate
+despite the game having been played at the original difficulty.
 
 **Why it happens:**
-The static game works fine with Vite's dev server (which sets these headers automatically for
-development). The Docker/nginx production configuration is written fresh and these headers are
-omitted since they're not obviously required for a single-origin static site.
+The difficulty is a piece of UI state. The game flow in `main.js` is async (the thinking delay
+uses `await`). A user gesture (dropdown change) can fire between the `await` and `game.computer_move()`.
+If `currentDifficulty` is a module-level variable that the dropdown event handler updates
+unconditionally, it can change at any point in the async flow.
 
 **How to avoid:**
-Add security headers to the nginx config for production hardening:
-```nginx
-location / {
-    add_header Cross-Origin-Opener-Policy "same-origin";
-    add_header Cross-Origin-Embedder-Policy "require-corp";
-    add_header X-Content-Type-Options "nosniff";
+Two approaches — choose one based on product decision:
+
+**Option A (simpler, recommended for this project):** Disable the dropdown while a game is
+in progress. Enable it only on the game-over screen or before the first move. Reset it on
+`resetGame()`.
+
+```javascript
+function setDifficultyEnabled(enabled) {
+  difficultyEl.disabled = !enabled;
+}
+// Disable on first human move; re-enable in resetGame()
+```
+
+**Option B (if mid-game changes are desired):** Latch the difficulty at game start.
+
+```javascript
+let activeDifficulty; // set at game start, not from dropdown during play
+
+function startGame() {
+  activeDifficulty = parseInt(difficultyEl.value, 10);
+  setDifficultyEnabled(false);
+  // ...
 }
 ```
 
-For WASM specifically, `X-Content-Type-Options: nosniff` ensures the browser respects the
-`Content-Type` header and doesn't sniff the binary as something else.
+The existing codebase already has the `isProcessing` guard and `thinkingTimer` cancel pattern —
+difficulty locking should follow the same discipline.
 
 **Warning signs:**
-- WASM loads fine in the Docker container locally but fails when deployed to a CDN
-- Browser console shows CORS errors referencing `.wasm` files
-- Security scanner reports missing COEP/COOP headers
+- Difficulty dropdown is enabled during computer thinking delay
+- `currentDifficulty` is read directly inside `handleCellClick` from the dropdown rather than
+  from a latched value set at game start
+- Integration test: change difficulty during the thinking delay and observe if the computer
+  plays at the new or old level
 
-**Phase to address:** nginx configuration phase — include security headers from the start;
-test with a security header scanner before calling deployment complete.
+**Phase to address:** UI integration phase — difficulty locking must be part of the initial
+dropdown implementation, not a later fix.
 
 ---
 
-### Pitfall 4: Vite SPA Routing — Direct URL Access Returns nginx 404
+### Pitfall 4: `computer_move()` Signature Change Breaks the Existing JS Call Site
 
 **What goes wrong:**
-This project is a single-page application with a single `index.html`. nginx serves static files,
-and a request to `/` returns `index.html` correctly. But if any path is accessed directly (e.g.,
-a cached bookmark, a reload on a non-root path), nginx returns 404 because there's no file at
-that path on disk.
+`computer_move()` currently takes no arguments. Changing its signature to accept `difficulty: u8`
+requires updating every call site in `main.js`. There is only one call site today
+(`const compPos = game.computer_move();`), but it is easy to add the new signature in Rust, rebuild
+the WASM, and then get a runtime error — not a compile error — when the JS glue code changes.
 
-For *this specific game* (no client-side routing, single HTML file), this pitfall is LOW severity —
-the user always lands on `/` and there are no sub-routes. But if the Docker image is ever used
-as a template or extended, the missing `try_files` directive will cause confusion.
+wasm-bindgen generates new JavaScript glue in `pkg/tic_tac_toe.js` that expects the argument.
+If the JS call site is not updated, the call becomes `game.computer_move(undefined)`, which
+means `difficulty = 0` in Rust (NaN→0 coercion). The game silently defaults to Easy regardless
+of the dropdown.
 
 **Why it happens:**
-Default nginx config tries to serve files at the literal request path. SPAs use client-side
-routing and don't have corresponding files. Vite's build output is always `index.html` at root.
+The Rust/WASM build and the JS code are not type-checked together. TypeScript would catch the
+mismatch (the generated `.d.ts` would show the updated signature), but this project uses vanilla
+JS. The mismatch only surfaces at runtime via wrong behavior — no thrown exception.
 
 **How to avoid:**
-Add `try_files` to the nginx location block:
-```nginx
-location / {
-    root   /usr/share/nginx/html;
-    index  index.html;
-    try_files $uri $uri/ /index.html;
+1. Update the JS call site in the same commit that changes the Rust signature. Treat this as a
+   cross-boundary interface change that must be done atomically.
+2. Add a runtime assertion in JS to verify the returned position is valid:
+   `if (compPos === NO_MOVE) { /* handle */ }` — already present. No change needed here.
+3. After rebuilding WASM, check `pkg/tic_tac_toe.js` to confirm the generated signature matches
+   what the JS side is passing. The generated file is the ground truth.
+
+**Warning signs:**
+- AI always plays at the easiest level regardless of dropdown selection
+- `console.log(game.computer_move.toString())` shows an argument in the function signature that
+  JS is not passing
+- Building WASM succeeds but the game behavior is wrong after the rebuild
+
+**Phase to address:** WASM bridge update phase — update `wasm_api.rs` and `main.js` together in
+the same phase. Do not split across phases.
+
+---
+
+### Pitfall 5: localStorage Key Collision Between Difficulty and Score Data
+
+**What goes wrong:**
+The existing `SCORE_KEY = 'ttt-score'` stores `{ wins, losses, draws }` as JSON in localStorage.
+If the difficulty setting is stored under the same key (e.g., appended to the score object), there
+is a schema migration problem: existing users have `ttt-score` without a `difficulty` field. If
+the new code reads `stored.difficulty` without a default, it gets `undefined`, which becomes `NaN`
+when passed to `parseInt()`, which then becomes `0` after the NaN→fallback logic (if present) —
+or silently operates at the wrong difficulty if the fallback is missing.
+
+Additionally, if difficulty is stored under `'ttt-score'` but score reading happens before
+difficulty reading, the score object may get re-parsed incorrectly if the shape changes.
+
+**Why it happens:**
+Convenience: there's already a localStorage read/write pattern for score. Reusing the key with
+an extended object seems like less code. But it breaks existing stored data for users upgrading
+from v1.3 → v1.4.
+
+**How to avoid:**
+Use a **separate key** for difficulty:
+
+```javascript
+const DIFFICULTY_KEY = 'ttt-difficulty';
+
+function loadDifficulty() {
+  try {
+    const saved = localStorage.getItem(DIFFICULTY_KEY);
+    const parsed = parseInt(saved, 10);
+    return isNaN(parsed) || parsed < 0 || parsed > 3 ? 1 : parsed; // default: Medium
+  } catch {
+    return 1; // SecurityError in private browsing
+  }
+}
+
+function saveDifficulty(level) {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, String(level));
+  } catch { /* quota exceeded — ignore */ }
 }
 ```
 
-This serves real files (like `assets/tic_tac_toe_bg-*.wasm`) when they exist, and falls back to
-`index.html` for everything else. This is safe for Vite's content-hashed asset files because they
-always exist in `dist/assets/`.
+This matches the existing `MUTE_KEY = 'ttt-muted'` pattern in `audio.js` — separate key per concern.
 
 **Warning signs:**
-- `curl http://localhost/something` returns nginx 404 instead of `index.html`
-- Hard refresh in browser on any non-root URL shows nginx 404 page
+- `JSON.parse(localStorage.getItem('ttt-score'))` returns an object with unexpected shape
+- A user who played v1.3 sees a wrong difficulty level when first loading v1.4
+- `parseInt(undefined)` or `parseInt(null)` warnings appear in console after upgrade
 
-**Phase to address:** nginx configuration phase — include `try_files` in the initial config
-even if this game doesn't have sub-routes.
+**Phase to address:** localStorage persistence phase — use separate keys from the start; do not
+mix difficulty into the score object.
 
 ---
 
-### Pitfall 5: `target/` and `node_modules/` Included in Build Context, Bloating Context Transfer
+### Pitfall 6: Difficulty Dropdown Reads Stale Value After `resetGame()`
 
 **What goes wrong:**
-`docker buildx build .` sends the entire working directory as the build context to the Docker
-daemon. For a Rust + Node.js project, the working directory contains:
-- `target/` — Rust compilation cache (can be **gigabytes** for a project with WASM targets)
-- `node_modules/` — npm dependencies (typically 50–200MB)
-- `pkg/` — previously built WASM output
-- `dist/` — previously built Vite output
+After `resetGame()` is called (New Game button or auto-reset), the difficulty dropdown may be
+disabled (from Pitfall 3's prevention). If `resetGame()` forgets to re-enable the dropdown, the
+user can never change difficulty after the first game. The game silently locks to whatever
+difficulty was set for game 1.
 
-Sending gigabytes of build cache as context wastes time before the first `FROM` even executes.
-On slow CI runners or when the Dockerfile doesn't use these directories (the Dockerfile installs
-fresh), this is pure waste.
+A related problem: if the dropdown value is reset to a hardcoded default on `resetGame()` instead
+of being read from the current selection or localStorage, the user's chosen difficulty is lost
+after each New Game.
 
 **Why it happens:**
-`.dockerignore` is easy to forget for projects that didn't start Docker-first. Rust developers
-know `target/` is large but may not realize Docker sees it. Node developers know `node_modules/`
-but may focus on Rust-side ignores.
+`resetGame()` currently resets: `game.reset()`, clears the board DOM, clears the win line,
+restores turn status, cancels the thinking timer, and hides the restart button. Difficulty
+enable/disable is a new concern that needs to be added to this function explicitly — it won't
+happen automatically.
 
 **How to avoid:**
-Create a `.dockerignore` file covering both ecosystems:
-```
-# Rust build artifacts (can be gigabytes)
-target/
+Add explicit difficulty management to `resetGame()`:
 
-# Previously built outputs (Dockerfile rebuilds these)
-pkg/
-dist/
-
-# Node.js dependencies (installed fresh inside Docker)
-node_modules/
-
-# Development and test files
-test.html
-*.log
-.git/
-.gitignore
-.github/
-
-# Planning and documentation (not needed in image)
-.planning/
-AGENTS.md
-README.md
-
-# Editor and OS files
-.DS_Store
-.vscode/
-*.swp
+```javascript
+function resetGame() {
+  // ... existing reset logic ...
+  setDifficultyEnabled(true); // Re-enable dropdown after game ends
+  // Do NOT reset dropdown value — preserve the user's selection
+}
 ```
 
-**Critical:** Both `target/` AND `node_modules/` must be ignored for a Rust+Node project.
-Ignoring only one is a common mistake.
+And at the start of a game (on first human move or on computer_move call), latch the value and
+disable the dropdown:
+
+```javascript
+function latchDifficulty() {
+  activeDifficulty = parseInt(difficultyEl.value, 10);
+  setDifficultyEnabled(false);
+}
+```
 
 **Warning signs:**
-- Docker build shows `Sending build context to Docker daemon  2.5GB` (or similar large size)
-- Build is slow before any `RUN` step executes
-- `docker build -f Dockerfile --no-cache .` takes 60+ seconds just on context transfer
+- After completing one game and clicking New Game, the difficulty dropdown is grayed out
+- The difficulty resets to "Easy" after every New Game even if the user selected "Hard"
+- `resetGame()` does not contain any reference to `difficultyEl`
 
-**Phase to address:** `.dockerignore` creation phase — create BEFORE the first `docker build`.
-Verify with: `docker build --dry-run .` or inspect context size in build output.
+**Phase to address:** UI integration phase — difficulty enable/disable must be explicitly wired
+to `resetGame()` and game-start flow in the same phase.
 
 ---
 
-### Pitfall 6: `Cargo.lock` Not Copied into Build Stage — Non-Reproducible Rust Builds
+### Pitfall 7: Unbeatable Mode Does Not Actually Play Perfect Minimax Without Code Change
 
 **What goes wrong:**
-The Dockerfile copies `Cargo.toml` to install dependencies before copying source code (a common
-layer caching pattern). If `Cargo.lock` is omitted from the COPY instruction (or from the build
-context via `.dockerignore`), Cargo performs dependency **resolution** on every build and may
-pull newer patch versions of crates. This breaks build reproducibility and can introduce
-surprising compilation failures in CI when a new crate version has a breaking change.
+The current `get_computer_move()` function in `src/ai.rs` uses `MISTAKE_RATE` to decide whether
+to play randomly or run minimax. Setting the rate to `0.0` for "Unbeatable" means
+`rng.random_bool(0.0)` always returns `false`, so minimax always runs. This is correct.
+
+However, there is a subtle issue: the `random_bool(0.0)` call **still executes** and consumes
+an RNG invocation even when the rate is `0.0`. For `Unbeatable` mode, this is wasted computation.
+More importantly: if the refactoring adds the mistake rate as a parameter and the guard is
+`if rate > 0.0 && rng.random_bool(rate)`, the behavior is correct. But if the guard is written
+as `if rng.random_bool(rate)` with `rate = 0.0`, it still works — `random_bool(0.0)` returns
+`false` in the `rand` crate.
+
+The real pitfall is the opposite: if `rate` is somehow `1.0` for Easy (always random), minimax
+is never called. But Easy mode should be random **most of the time**, not always. If the tuning
+table maps Easy to `1.0`, the AI never blocks or threatens — it is completely random, which may
+feel broken rather than easy. A value of `0.75` (75% random) produces better "easy" feel.
 
 **Why it happens:**
-Developers familiar with Node.js Docker caching use the `COPY package.json package-lock.json ./`
-+ `RUN npm ci` pattern, which correctly pins to the lockfile. The Rust equivalent is less
-well-known: both `Cargo.toml` AND `Cargo.lock` must be copied before `RUN cargo` to get pinned
-dependencies.
+The mistake rate is a probability and its UX meaning is easy to invert. "Easy" means "high
+mistake rate" (large number) which is counterintuitive — higher rate = worse AI. Developers
+accidentally swap Easy and Hard when building the lookup table.
 
 **How to avoid:**
-```dockerfile
-# Copy both manifest and lockfile for reproducible dependency resolution
-COPY Cargo.toml Cargo.lock ./
-# Then copy source
-COPY src/ ./src/
-RUN wasm-pack build --target web --release
+Name the mapping clearly and test it:
+
+```rust
+fn mistake_rate_for_level(level: u8) -> f64 {
+    // Higher rate = more mistakes = easier for human
+    match level {
+        0 => 0.75, // Easy: 75% chance of random move
+        1 => 0.40, // Medium: 40% chance of random move (harder than current 25%)
+        2 => 0.15, // Hard: 15% chance of random move
+        _ => 0.0,  // Unbeatable: pure minimax, no random moves
+    }
+}
 ```
 
-Also ensure `Cargo.lock` is **not** in `.dockerignore` and **is** committed to git.
-For library crates, `Cargo.lock` is sometimes gitignored (Cargo convention for published libs),
-but for applications and binaries (including WASM games), it must be committed and included.
+Add a test that verifies the Easy AI loses more than the Hard AI in N games.
 
 **Warning signs:**
-- Build succeeds locally but fails in CI with "failed to select a version for `xyz`"
-- Different build runs produce different `.wasm` binary sizes
-- `cargo update` was not run but a dependency version changed in the Docker image
+- The existing test `test_ai_beatable_in_100_games` fails after the difficulty refactor with
+  `Unbeatable` settings (good — the test protects against this)
+- Easy mode plays so well it feels like Hard (rates accidentally swapped)
+- Hard mode is beatable nearly every game (rates accidentally too high)
 
-**Phase to address:** Dockerfile creation phase — include `Cargo.lock` in the first COPY.
-
----
-
-### Pitfall 7: Multi-Arch Build Fails to Push Without `--push` Flag (Images Not Accessible Locally)
-
-**What goes wrong:**
-Running:
-```bash
-docker buildx build --platform linux/amd64,linux/arm64 -t user/app:latest .
-```
-without `--push` (or `--output type=image,push=true`) succeeds but **does not load the multi-arch
-manifest into the local Docker image store**. The output exists only in buildx's internal cache.
-`docker images` shows nothing. `docker run user/app:latest` fails with "image not found."
-
-Additionally, attempting `--load` with multi-arch builds fails because the local Docker image
-store (classic storage drivers) cannot represent multi-platform manifests:
-```
-error: docker exporter does not currently support exporting manifest lists
-```
-
-**Why it happens:**
-Multi-arch manifests require a registry to store the manifest list. The local Docker engine
-traditionally stores single-platform images. This is a fundamental constraint of buildx multi-arch
-builds — they must be pushed to a registry or use the containerd image store.
-
-**How to avoid:**
-In GitHub Actions, always use `--push` (via `docker/build-push-action` with `push: true`):
-```yaml
-- name: Build and push
-  uses: docker/build-push-action@v7
-  with:
-    platforms: linux/amd64,linux/arm64
-    push: true
-    tags: ${{ steps.meta.outputs.tags }}
-```
-
-For local testing, build single-platform with `--load`:
-```bash
-# Local test: single platform
-docker buildx build --platform linux/amd64 --load -t user/app:test .
-docker run --rm -p 8080:80 user/app:test
-```
-
-**Warning signs:**
-- `docker buildx build --platform ... .` exits 0 but `docker images` shows nothing
-- `error: docker exporter does not currently support exporting manifest lists` when using `--load`
-- Confusion about whether the build "worked" because it exited without error
-
-**Phase to address:** GitHub Actions workflow phase — always use `push: true` in the workflow;
-document local testing command with single-platform `--load`.
-
----
-
-### Pitfall 8: Docker Hub Credentials Stored as Plaintext or Using Password Instead of Access Token
-
-**What goes wrong:**
-Using Docker Hub account **password** instead of an **access token** in GitHub Actions secrets:
-- Passwords have full account access — if the secret leaks, the attacker owns the Docker Hub account
-- Docker Hub access tokens can be scoped to specific repositories and revoked without changing the password
-- GitHub Actions `docker/login-action` accepts both, making it easy to accidentally use the password
-
-A separate mistake: using `${{ secrets.DOCKERHUB_USERNAME }}` for the username when it's not
-actually a GitHub **secret** (it's a public username) — it should be a GitHub **variable**
-(`${{ vars.DOCKERHUB_USERNAME }}`). Storing non-secret data as secrets obscures configuration
-and doesn't provide security benefit.
-
-**Why it happens:**
-The Docker Hub "password" works in `docker login`, so developers use it. The distinction between
-GitHub Actions `secrets` and `vars` is not prominent. Many tutorials use `${{ secrets.DOCKERHUB_USERNAME }}`
-because it "works" — but the pattern leaks a public value through the secrets mechanism.
-
-**How to avoid:**
-1. Create a Docker Hub access token with scope: **Read & Write** for the specific repository
-   (Settings → Security → Access Tokens)
-2. Store the token in GitHub secrets as `DOCKERHUB_TOKEN`
-3. Store the username as a GitHub **variable** (`vars.DOCKERHUB_USERNAME`), not a secret
-
-```yaml
-- name: Login to Docker Hub
-  uses: docker/login-action@v4
-  with:
-    username: ${{ vars.DOCKERHUB_USERNAME }}    # variable, not secret
-    password: ${{ secrets.DOCKERHUB_TOKEN }}     # access token, not password
-```
-
-**Warning signs:**
-- GitHub Actions secrets list contains `DOCKERHUB_USERNAME` (should be a variable)
-- Docker Hub access shows all-repositories access (should be repository-scoped)
-- Security audit finds credentials with excessive permissions
-
-**Phase to address:** GitHub Actions workflow phase — set up credentials before writing any
-workflow code; use access tokens from day one.
-
----
-
-### Pitfall 9: Tag `latest` Applied to Every Push, Including Work-in-Progress Commits
-
-**What goes wrong:**
-A naive CI workflow that pushes on every commit with `tags: user/app:latest` means every pushed
-commit — including debugging commits, half-finished features, and commits that "accidentally" pass
-CI — overwrites the `latest` tag on Docker Hub. Users who run `docker pull user/app` get whatever
-was last pushed, not necessarily a real release.
-
-For this project, the planned behavior is: **publish only on git tag push**. A manual `latest`
-tag in a push-on-every-commit workflow defeats this entirely.
-
-**Why it happens:**
-Copy-pasting workflows from tutorials that show `tags: user/app:latest`. The `latest` tag in
-Docker has special meaning (it's what `docker pull name` resolves to by default) but Docker Hub
-doesn't enforce any semantics — anything can overwrite it at any time.
-
-**How to avoid:**
-Use `docker/metadata-action` with `type=semver` tags triggered only on `refs/tags/v*` pushes:
-
-```yaml
-on:
-  push:
-    tags:
-      - 'v*.*.*'    # Only trigger on version tags like v1.2.0
-
-jobs:
-  docker:
-    steps:
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: user/tic-tac-toe
-          tags: |
-            type=semver,pattern={{version}}          # e.g. 1.2.0
-            type=semver,pattern={{major}}.{{minor}}  # e.g. 1.2
-            type=raw,value=latest,enable={{is_default_branch}}
-```
-
-With this configuration:
-- `git tag v1.2.0 && git push --tags` → publishes `1.2.0`, `1.2`, and `latest`
-- Regular commits → no Docker Hub push at all
-
-**Warning signs:**
-- GitHub Actions workflow triggers on `push:` to branches (not just tags)
-- `tags: user/app:latest` is hardcoded in the workflow (not from metadata-action)
-- Docker Hub shows recent push timestamps that don't correspond to releases
-
-**Phase to address:** GitHub Actions workflow phase — use metadata-action from the start;
-trigger on tag push only.
-
----
-
-### Pitfall 10: Rust Multi-Stage Build Image Size Bloat from Build Dependencies
-
-**What goes wrong:**
-The Rust build stage image (`rust:slim` or `rust:alpine`) plus:
-- Full Rust toolchain with std library (~600MB)
-- wasm-pack binary and its dependencies (~50MB)
-- Cargo build cache with all dependencies (~150MB for this project)
-- wasm32-unknown-unknown target (~60MB)
-- Node.js + npm (~100MB)
-- node_modules (~50MB for this project)
-
-... totals **~1GB+** in the build stage. Without multi-stage builds, this entire stack would
-ship as the final image. With a correct multi-stage build, the **serve stage** is just:
-- `nginx:alpine` base (~8MB)
-- `dist/` static files (JS + CSS + WASM, ~80KB total for this project)
-
-The final image should be **~8–10MB**. If it's larger, the multi-stage build has a mistake.
-
-**Common mistakes that inflate the serve stage:**
-1. `COPY . .` in the serve stage instead of `COPY --from=build /app/dist /usr/share/nginx/html`
-2. Installing additional tools in the serve stage (curl, vim, build-essential)
-3. Using `rust:latest` or `node:latest` as the serve stage base (not `nginx:alpine`)
-4. Forgetting `--from=build` in the COPY — copies from the local filesystem into the serve layer
-
-**How to avoid:**
-```dockerfile
-# Build stage — will NOT be included in the final image
-FROM --platform=$BUILDPLATFORM rust:slim AS build
-WORKDIR /app
-
-# Install Node.js in the build stage only
-RUN apt-get update && apt-get install -y curl nodejs npm && rm -rf /var/lib/apt/lists/*
-
-# Install wasm-pack
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-# Add WASM target
-RUN rustup target add wasm32-unknown-unknown
-
-# Copy and build Rust
-COPY Cargo.toml Cargo.lock ./
-COPY src/ ./src/
-RUN wasm-pack build --target web --release
-
-# Copy and build JS
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY index.html vite.config.js ./
-RUN npm run build
-
-# Serve stage — this is the final image
-FROM nginx:alpine AS serve
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-```
-
-Verify final image size:
-```bash
-docker buildx build --platform linux/amd64 --load -t tic-tac-toe:test .
-docker image ls tic-tac-toe:test
-# Should show ~10MB, not hundreds of MB
-```
-
-**Warning signs:**
-- `docker image ls` shows the image as >50MB
-- Build stage packages (cargo, rustup, npm, node_modules) appear in `docker exec` of the container
-- `docker history` shows large layers in the final image that shouldn't be there
-
-**Phase to address:** Dockerfile creation phase — verify image size immediately after first build;
-fix before adding CI.
+**Phase to address:** Rust AI parameterization phase — define the mapping table with comments;
+add a unit test covering all 4 levels before wiring up the WASM boundary.
 
 ---
 
 ## Technical Debt Patterns
 
-Shortcuts that seem reasonable but create long-term problems.
-
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Using `rust:latest` as build base (not pinned version) | Always uses newest Rust | Build may break when Rust updates (edition changes, API changes) | Never for CI; pin to `rust:1` or `rust:slim` |
-| Building both platforms under QEMU (no `--platform=$BUILDPLATFORM`) | Simpler Dockerfile | arm64 build is 10–30× slower; may timeout in CI | Never — use `--platform=$BUILDPLATFORM` always |
-| Using Docker Hub password instead of access token | Works immediately | Full account exposure if secret leaks | Never — access tokens are free and scoped |
-| `latest` tag on every commit push | Simple workflow | Latest tag is unstable; users get WIP builds | Never for a public image |
-| No `.dockerignore` | No extra file to maintain | Multi-GB build context; slow builds | Never — create `.dockerignore` with first Dockerfile |
-| Single-stage Dockerfile (no multi-stage) | Simpler file | ~1GB final image instead of ~10MB | Never — multi-stage is the standard for compiled projects |
-| `RUN npm install` instead of `npm ci` | Allows version range resolution | Non-reproducible builds; ignores package-lock.json | Never in Docker builds |
+| Pass `f64` mistake rate directly across boundary | One fewer abstraction layer | JS owns tuning; NaN/range issues; coupling | Never — use `u8` level, map in Rust |
+| Mix difficulty into `ttt-score` localStorage key | One fewer key to manage | Schema migration breaks existing users; entangles two concerns | Never — use separate `ttt-difficulty` key |
+| Leave difficulty dropdown always enabled | No enable/disable logic needed | Player can change difficulty mid-game; inconsistent state | Never — disable on game start, re-enable on reset |
+| Hardcode `activeDifficulty = 1` (Medium) in `resetGame()` | Simple reset | User's chosen difficulty lost after every New Game | Never — preserve dropdown value across resets |
+| Read difficulty directly from dropdown inside thinking delay | No latch variable needed | Race condition: difficulty can change during `await` | Never — latch at game start |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes at the boundary between Rust and Node.js in the same Dockerfile.
-
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| wasm-pack output → Vite input | `wasm-pack build` writes to `pkg/`; `COPY` only copies `src/` and misses `pkg/` for Vite | Run `wasm-pack build` before `npm run build`; both in the same stage; Vite reads from `pkg/` in the same directory |
-| Two package managers | Installing Node.js in the same `RUN` as Rust tools, then cleaning up later | Install Node.js early, clean apt cache in the same `RUN` layer to avoid layer size inflation |
-| COPY ordering for cache efficiency | `COPY . .` before `npm ci` — any source change invalidates the npm cache layer | Copy package files first: `COPY package.json package-lock.json ./` + `RUN npm ci`, then `COPY . .` |
-| Cargo.lock in `.dockerignore` | Accidentally ignoring `Cargo.lock` makes builds non-reproducible | Explicitly list what to ignore; never add `*.lock` glob patterns |
-| wasm-pack binary not on PATH | After `curl | sh` install, wasm-pack is in `~/.cargo/bin/` which may not be on PATH for subsequent RUN layers | Add `ENV PATH="/root/.cargo/bin:${PATH}"` after installing wasm-pack |
+| WASM boundary (u8 parameter) | Pass dropdown `.value` string directly: `game.computer_move(difficultyEl.value)` → NaN → 0 | Parse first: `game.computer_move(parseInt(difficultyEl.value, 10))` |
+| WASM boundary (signature change) | Update Rust but forget to update JS call site; game silently plays at level 0 | Update `wasm_api.rs` and `main.js` in the same phase; verify via `pkg/tic_tac_toe.js` |
+| localStorage (difficulty key) | Reuse `ttt-score` key with extended object; breaks existing stored data | Separate `ttt-difficulty` key; default fallback for missing/invalid stored values |
+| Thinking delay + difficulty | Read `difficultyEl.value` inside async function after `await` — may have changed | Latch difficulty to `activeDifficulty` before the `await`; read `activeDifficulty` in `computer_move()` call |
+| Reset flow | `resetGame()` does not re-enable dropdown → permanently locked after first game | Explicitly call `setDifficultyEnabled(true)` in `resetGame()` |
+| Dropdown initial value | Dropdown renders with first `<option>` selected instead of persisted value | In `main()`, after loading WASM, call `difficultyEl.value = String(loadDifficulty())` |
 
 ---
 
 ## Performance Traps
 
-Patterns that slow CI significantly.
+This feature has no performance traps of note. The AI runs synchronously in WASM (~1ms for
+minimax on a 3x3 board) and the difficulty only affects the probability of skipping minimax —
+easier levels are actually faster (random move skips minimax). No scale concerns apply.
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| No Cargo build cache between CI runs | Every build downloads + compiles all dependencies from scratch (2–5 min) | Use `docker/build-push-action` with `cache-from: type=gha` + `cache-to: type=gha,mode=max` | Every CI run without cache |
-| No npm ci cache between CI runs | npm downloads all packages each run | Cache `/root/.npm` in the build stage via BuildKit cache mount: `--mount=type=cache,target=/root/.npm` | Every CI run without cache |
-| Both platforms built sequentially on one runner | arm64 QEMU build adds 10–30× time | Use `--platform=$BUILDPLATFORM` so Rust only compiles once natively | Every multi-arch build |
-| `mode=min` for GHA cache | Only caches the result layer, not intermediate layers | Use `cache-to: type=gha,mode=max` to cache all layers | On cache miss — full rebuild |
+| Running minimax inside `random_bool` guard for Unbeatable | Minimax called even for random-move branch check | Guard: `if rate > 0.0 && rng.random_bool(rate)` vs `if rng.random_bool(rate)` | Never breaks functionally, but `rate = 0.0` short-circuits correctly either way — not a real trap |
 
 ---
 
 ## Security Mistakes
 
+This feature has a minimal attack surface (local game, no network). The relevant concern is:
+
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Using Docker Hub password instead of access token in GitHub secrets | Full Docker Hub account compromise if secret leaks | Create repository-scoped access token; store as `DOCKERHUB_TOKEN` |
-| No `X-Content-Type-Options: nosniff` header in nginx | Browser MIME sniffing could misinterpret WASM binary | Add `add_header X-Content-Type-Options nosniff;` to nginx config |
-| Running nginx as root (default) in container | Privilege escalation if nginx is compromised | Use `nginx:alpine` which drops to `nginx` user (uid 101) for worker processes by default |
-| Serving sensitive build artifacts (Cargo.lock, package.json exposed) | Leaks dependency versions for vulnerability scanning | Multi-stage build ensures only `dist/` is in the serve stage — build files never ship |
-| Public Docker Hub image with no README / description | Confused users may not know if it's an official release | Add Docker Hub description in workflow using `docker/hub-description-action` (optional but good practice) |
+| Reading localStorage `ttt-difficulty` without `try/catch` | Throws `SecurityError` in Safari private browsing; game fails to load | Wrap in `try/catch`; return default `1` (Medium) on any error — identical pattern to existing `loadScore()` |
+| Using `innerHTML` to render difficulty label in status message | XSS if difficulty label string is injected from localStorage without sanitization | Never use localStorage values in `innerHTML`; only use them as numeric indices to look up hardcoded strings |
+
+---
+
+## UX Pitfalls
+
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Difficulty changes mid-game silently affect AI strength | Player feels cheated or confused; Hard game suddenly becomes Easy | Disable dropdown during active game; only changeable between games |
+| Difficulty resets to default on every New Game | Player must re-select difficulty every game; annoying for players who always play Hard | Persist selection; preserve across `resetGame()` |
+| "Unbeatable" level is still beatable due to a bug | Trust broken; labeling misleads the player | Test Unbeatable in 100 games against perfect counter-play; assert 0 wins for human |
+| Dropdown styled inconsistently with existing theme | Visual jarring; looks like an afterthought | Match existing navy/red CSS variables; use `appearance: none` with a custom `select` style |
+| Score continues accumulating across all difficulties without indication | Player cannot tell if their win streak is against Easy or Unbeatable | Per PROJECT.md: single shared score tally is intentional; add difficulty label to game status instead |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear to work in the happy path but have hidden gaps.
-
-- [ ] **WASM MIME type:** Build succeeds and image runs — verify: `curl -I http://localhost/assets/*.wasm | grep content-type` shows `application/wasm`, not `application/octet-stream`
-- [ ] **Multi-arch manifest:** Image is pushed — verify: `docker manifest inspect user/app:latest` shows both `linux/amd64` and `linux/arm64` manifests
-- [ ] **Image size:** Build succeeds — verify: `docker image ls` shows <20MB for the serve image
-- [ ] **Cargo.lock included:** Build is reproducible — verify: `Cargo.lock` is present in the build context (not in `.dockerignore`, not gitignored)
-- [ ] **arm64 native in serve stage:** Multi-arch built — verify: `docker run --platform linux/arm64 --rm user/app uname -m` shows `aarch64`
-- [ ] **Tag policy:** Workflow runs on tag push — verify: pushing a commit to `main` does NOT trigger a Docker Hub push
-- [ ] **Credential type:** Docker Hub credentials set up — verify: secrets use access token, not password; username is a `vars` not a `secret`
-- [ ] **SPA routing:** nginx config deployed — verify: `curl http://localhost/nonexistent-path` returns `index.html` content (200), not nginx 404
-- [ ] **wasm-pack PATH:** Build runs in CI — verify: `wasm-pack --version` succeeds in the build stage without `command not found`
-- [ ] **No build artifacts in final image:** Multi-stage complete — verify: `docker exec <container> ls /usr/share/nginx/html` shows only `index.html` and `assets/`, not `src/`, `target/`, or `Cargo.toml`
+- [ ] **Difficulty persists on refresh:** Open game, select Hard, refresh page — verify Hard is still selected, not Medium/default
+- [ ] **Difficulty locked during play:** Start a game, try changing dropdown during computer thinking delay — verify dropdown is disabled
+- [ ] **Difficulty re-enables after game:** Finish a game (win/lose/draw), click New Game — verify dropdown is enabled
+- [ ] **Invalid localStorage value handled:** Set `localStorage.setItem('ttt-difficulty', 'garbage')` in console, refresh — verify game loads at Medium (default), not broken
+- [ ] **Unbeatable is actually unbeatable:** Run 100 games against Unbeatable playing optimal moves — verify 0 human wins
+- [ ] **Easy actually loses often:** Run 100 games against Easy playing optimal moves — verify human wins significantly more than against Hard
+- [ ] **No score contamination:** Changing difficulty between games does not reset or alter the score tally
+- [ ] **NaN defense:** Call `game.computer_move(NaN)` in browser console directly — verify Rust treats it as fallback level, not a crash
+- [ ] **WASM signature up to date:** After `wasm-pack build`, check `pkg/tic_tac_toe.js` — verify `computer_move` signature matches JS call site
 
 ---
 
 ## Recovery Strategies
 
-When pitfalls occur despite prevention, how to recover.
-
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| QEMU build timeout | LOW — add `--platform=$BUILDPLATFORM` to build stage FROM | Add `FROM --platform=$BUILDPLATFORM` prefix; re-push; new build completes in normal time |
-| WASM MIME type wrong in production | LOW — nginx config fix, rebuild image | Add explicit MIME type to nginx config; rebuild and push; users just need to refresh |
-| Wrong credentials in CI (password, not token) | LOW — update GitHub secret | Generate new Docker Hub access token; update `DOCKERHUB_TOKEN` secret; revoke old password usage |
-| `latest` tag on wrong commit | MEDIUM — must push a correct release | Create correct version tag; push; metadata-action will regenerate `latest` pointing to correct release |
-| Build context sending gigabytes | LOW — add `.dockerignore` | Create `.dockerignore`; re-run build; context drops to kilobytes immediately |
-| Bloated final image (build deps in serve stage) | MEDIUM — rewrite Dockerfile | Fix multi-stage copy path; rebuild; push; existing pulled images need replacement |
-| Multi-arch manifest not created (only single arch pushed) | MEDIUM — rebuild and push with `--platform` | Add both platforms to buildx command; push new manifest; docker pull will get multi-arch manifest |
+| Wrong level due to NaN coercion | LOW | Add JS-side `parseInt` + range check; rebuild WASM not required |
+| f64 passed instead of u8 level | MEDIUM | Change WASM API signature; rebuild WASM; update JS call site |
+| Difficulty stored in wrong localStorage key | LOW | Add migration in `loadDifficulty()`: check both old and new key; migrate on load |
+| Mid-game difficulty change producing wrong behavior | LOW | Add `disabled` attribute to dropdown at game start; no WASM change needed |
+| `resetGame()` permanently disables dropdown | LOW | Add `setDifficultyEnabled(true)` to `resetGame()` |
+| Easy/Hard rates swapped in lookup table | LOW | Fix constants in Rust; rebuild WASM; no JS change |
+| Unbeatable is still beatable | MEDIUM | Debug minimax; the issue is likely in `mistake_rate_for_level` returning non-zero for level 3 |
 
 ---
 
@@ -630,44 +465,39 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| QEMU slowness / arm64 compile | Dockerfile creation | Build time for arm64 stage is <2× amd64 time |
-| WASM MIME type | nginx configuration | `curl -I http://localhost/assets/*.wasm` shows `application/wasm` |
-| CORS / security headers | nginx configuration | Security header scanner returns no critical findings |
-| SPA routing / nginx 404 | nginx configuration | All paths return 200 with index.html content |
-| `.dockerignore` missing | Before first `docker build` | Build context size is <1MB |
-| `Cargo.lock` excluded | Dockerfile creation | Two successive builds produce identical `.wasm` binary checksums |
-| Multi-arch not pushed | GitHub Actions workflow | `docker manifest inspect` shows amd64 + arm64 |
-| Docker Hub password vs token | Credentials setup | GitHub secret name ends in `_TOKEN`, not `_PASSWORD` |
-| Tag `latest` on every push | GitHub Actions workflow | Push to main branch; verify no Docker Hub push occurs |
-| Image size bloat | Dockerfile creation | `docker image ls` shows <20MB |
+| NaN/out-of-range u8 coercion | Rust AI parameterization | Unit test: call `computer_move` with level=255 and level=99; verify sane fallback |
+| f64 across boundary instead of u8 level | Rust AI parameterization (design decision) | Code review: `wasm_api.rs` signature uses `u8`, not `f64` |
+| Mid-game difficulty change | UI integration (dropdown) | Manual test: change dropdown during thinking delay; verify disabled |
+| Signature change breaks JS call site | WASM bridge update | After wasm-pack build: `grep -n 'computer_move' pkg/tic_tac_toe.js` matches JS usage |
+| localStorage key collision | localStorage persistence | `localStorage.getItem('ttt-score')` still valid JSON after v1.4 loads for first time |
+| Dropdown not re-enabled after reset | UI integration (reset flow) | Play game to completion; click New Game; verify dropdown is interactive |
+| Stale dropdown value read inside async delay | UI integration (latch pattern) | Code review: `activeDifficulty` latched before `await`, not read from `difficultyEl` inside delay |
+| Easy/Hard rates accidentally swapped | Rust AI parameterization | Test: Easy AI loses to random play more than Hard AI; Unbeatable draws/wins in 100 games |
 
 ---
 
 ## Sources
 
-- [Docker: Multi-platform image docs](https://docs.docker.com/build/building/multi-platform/) — HIGH confidence (official, 2026)
-  — `--platform=$BUILDPLATFORM` pattern, QEMU limitations warning
-- [Docker: GitHub Actions multi-platform](https://docs.docker.com/build/ci/github-actions/multi-platform/) — HIGH confidence (official, 2026)
-  — `docker/setup-qemu-action`, `docker/build-push-action` patterns
-- [Docker: GitHub Actions cache backend](https://docs.docker.com/build/cache/backends/gha/) — HIGH confidence (official, 2026)
-  — `type=gha,mode=max` cache configuration
-- [docker/metadata-action README](https://github.com/docker/metadata-action) — HIGH confidence (official, 2026)
-  — Tag semver patterns, `latest` tag management, `vars.DOCKERHUB_USERNAME` vs `secrets.DOCKERHUB_TOKEN`
-- [MDN: WebAssembly Loading and Running](https://developer.mozilla.org/en-US/docs/WebAssembly/Guides/Loading_and_running) — HIGH confidence (official, updated 2025-08-26)
-  — `instantiateStreaming()` requires correct MIME type
-- [nginx Docker Hub official image](https://hub.docker.com/_/nginx) — HIGH confidence (official, 2026)
-  — nginx:alpine architecture support, user/group IDs, configuration patterns
-- Codebase inspection: `Cargo.toml`, `package.json`, `vite.config.js`, `dist/assets/` — HIGH confidence (direct)
-  — wasm-pack output to `pkg/`, Vite output to `dist/`, `.wasm` file naming pattern
+- wasm-bindgen official docs — Numbers: `u8, i8, ..., f32, f64` represented as JavaScript Numbers;
+  `NaN/Infinity/-Infinity → 0`; out-of-range integers wrap. (Context7: `/wasm-bindgen/wasm-bindgen`,
+  topic: "Number to u8, i8, u16, i16, u32, i32, isize, and usize") — HIGH confidence
+- wasm-bindgen design: `random_bool(f64)` behavior for `0.0` — passes silently, returns `false`
+  (rand crate 0.10, `RngExt::random_bool`) — HIGH confidence (direct codebase reading `Cargo.toml` rand=0.10)
+- Direct codebase inspection: `src/ai.rs`, `src/wasm_api.rs`, `src/main.js`, `src/audio.js`
+  — HIGH confidence
+- Existing localStorage pattern in `src/main.js` (`SCORE_KEY`, `loadScore`, `saveScore`) and
+  `src/audio.js` (`MUTE_KEY`) — HIGH confidence (direct reading)
+- Existing thinking delay / async race condition pattern in `main.js` (`thinkingTimer`,
+  `isProcessing` guard, FEEL-02 guard after `await`) — HIGH confidence (direct reading)
 
 ---
 
-## Prior Version Reference
+## Prior Version References
 
-The v1.1 PITFALLS.md (browser-side polish: CSS animations, Web Audio, localStorage, dark mode)
-is preserved for reference. That document is specific to browser-side JS/CSS concerns and does
-not overlap with this Docker deployment document.
+- v1.2 PITFALLS.md covers Docker multi-architecture deployment pitfalls (no overlap)
+- v1.1 PITFALLS.md covers browser polish (CSS animations, Web Audio, localStorage patterns) — the
+  localStorage `try/catch` and separate-key patterns established there apply directly to this milestone
 
 ---
-*Pitfalls research for: v1.2 Docker multi-architecture deployment milestone*
-*Researched: 2026-04-14*
+*Pitfalls research for: v1.4 Difficulty Levels — Rust/WASM AI parameterization + JS integration*
+*Researched: 2026-04-27*

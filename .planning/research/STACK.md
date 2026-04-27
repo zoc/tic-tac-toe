@@ -1,261 +1,247 @@
 # Stack Research
 
-**Domain:** Docker multi-arch deployment — Rust/WASM + Vite static site
-**Researched:** 2026-04-14
-**Confidence:** HIGH — all versions verified against Docker Hub and GitHub Releases
+**Domain:** Rust/WASM game — difficulty level parameter passing across the WASM boundary
+**Researched:** 2026-04-27
+**Confidence:** HIGH
 
 ---
 
 ## Context
 
-This is a **subsequent milestone** stack addendum. The core Rust/WASM/Vite stack is already validated (see prior research). This document covers only the **new additions** required for Docker multi-architecture deployment:
+This is a subsequent-milestone research file for v1.4 (Difficulty Levels). The full stack
+(Rust, wasm-pack 0.14.0, wasm-bindgen 0.2, Vite 8, Vanilla JS) is validated and unchanged.
+This file covers only what changes at the WASM boundary to pass a difficulty level from
+JavaScript to the Rust AI.
 
-- Multi-stage Dockerfile (Rust/wasm-pack build → nginx serve)
-- Multi-arch manifest (linux/amd64 + linux/arm64) via docker buildx + QEMU
-- GitHub Actions CI triggered on git tag push, publishing to Docker Hub
+**Current WASM boundary** (`src/wasm_api.rs`):
+- `WasmGame` struct exported via `#[wasm_bindgen]`
+- `computer_move(&mut self) -> u8` calls `get_computer_move(&self.inner)` with the global
+  constant `MISTAKE_RATE: f64 = 0.25` hardcoded in `src/ai.rs`
+- No difficulty parameter exists anywhere in the call chain
+
+**Goal:** JS passes a difficulty level (Easy/Medium/Hard/Unbeatable) to `WasmGame` on startup
+and on dropdown change. The Rust AI uses the matching mistake rate for each subsequent
+`computer_move()` call.
 
 ---
 
-## Key Architectural Insight: WASM Is Architecture-Neutral
+## No New Dependencies Required
 
-**This is the most important fact for the Dockerfile design.**
+Zero new crates or npm packages are needed for this feature. Every capability required is
+already present in the validated stack:
 
-WebAssembly `.wasm` binaries are not compiled to a native ISA — they are portable bytecode. A `.wasm` file built on `linux/amd64` runs identically on `linux/arm64` because the browser's WASM runtime handles the native translation at runtime (confirmed: https://webassembly.org/docs/portability/).
-
-**Consequence:** The Rust/wasm-pack compilation step does NOT need to run twice (once per target arch). It only needs to run once on the host architecture (`linux/amd64`, which is the GitHub Actions runner). The final artifact is a pure-static `dist/` directory of HTML + CSS + JS + `.wasm` — all architecture-neutral files.
-
-**This means the build stage does NOT need cross-compilation.** Only the `COPY` into nginx needs to produce arch-specific nginx binaries. Docker buildx handles that automatically by pulling the correct nginx binary for each target platform.
+| Need | Already provided by |
+|------|---------------------|
+| Method on exported struct accepting u8 | wasm-bindgen 0.2 — u8 crosses boundary as JS Number natively |
+| f64 parameter in AI function | Pure Rust — no boundary crossing needed |
+| Randomized move selection | rand 0.10 — `random_bool(f64)` already takes a plain f64 |
+| Dropdown value in JS | Native HTML select element — value is already an integer string |
+| Persistence of difficulty selection | localStorage — already in use for score and mute state |
 
 ---
 
 ## Recommended Stack
 
-### Docker Base Images
+### Core Technologies (unchanged)
 
-| Image | Tag | Purpose | Why Recommended |
-|-------|-----|---------|-----------------|
-| `rust` | `1.94.1-slim` | Rust/wasm-pack build stage | Official Rust Docker image, `slim` variant removes docs/examples but keeps cargo and glibc. Matches the project's validated Rust version. Multi-arch on Docker Hub (amd64, arm64, etc.) but build runs native on amd64. |
-| `node` | `22-alpine3.23` | npm/Vite build sub-stage | Node 22 LTS (current LTS as of 2026-04), Alpine keeps image small (~54 MB compressed). Used to run `npm ci && npm run build`. Supports linux/amd64 and linux/arm64. |
-| `nginx` | `1.29.8-alpine3.23` | Production serve stage | Current stable nginx (1.29.8) on Alpine 3.23. ~24 MB compressed. Supports linux/amd64, linux/arm64, linux/arm/v7, linux/386, linux/s390x, linux/ppc64le — all from a single image tag. Confirmed on Docker Hub 2026-04-14. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| wasm-bindgen | 0.2 (Cargo.toml) | Rust/JS interop | Already in use; u8 and f64 both cross the WASM boundary as JS Number — no serialization, no BigInt, zero overhead (verified via Context7 wasm-bindgen docs, types/numbers.md) |
+| wasm-pack | 0.14.0 (pinned) | WASM compilation | Already pinned in Dockerfile; no version change needed |
+| rand | 0.10 (Cargo.toml) | Random move injection | `rng.random_bool(rate)` accepts a plain f64; signature change in `get_computer_move` is non-breaking to the crate |
 
-**Tag pinning rationale:**
-- `rust:1.94.1-slim` — fully pinned to match project's validated Rust version; prevents silent toolchain drift
-- `node:22-alpine3.23` — LTS major + specific Alpine patch; `22-alpine` (floating to latest LTS patch) is also acceptable
-- `nginx:1.29.8-alpine3.23` — fully pinned for deterministic deployments; `nginx:alpine` (floating to latest stable) is acceptable for this project's scale
+### Supporting Libraries (unchanged)
 
-### GitHub Actions Actions
-
-| Action | Version | Purpose | Why |
-|--------|---------|---------|-----|
-| `docker/setup-qemu-action` | `v4` | Install QEMU binfmt handlers on runner | Required to emulate `linux/arm64` on `linux/amd64` GitHub runners. v4.0.0 released 2026-03-04 (Node 24 runtime). Latest. |
-| `docker/setup-buildx-action` | `v4` | Create and configure BuildKit builder | Activates `docker buildx` with multi-platform support. v4.0.0 released 2026-03-05 (Node 24 runtime). Latest. |
-| `docker/login-action` | `v4` | Authenticate to Docker Hub | v4.1.0 released 2026-04-02. Latest. Node 24 runtime. |
-| `docker/build-push-action` | `v7` | Build multi-arch image and push manifest | v7.1.0 released 2026-04-10. Latest. Handles `platforms: linux/amd64,linux/arm64`, creates the multi-arch manifest automatically. |
-| `docker/metadata-action` | `v6` | Generate Docker tags from git refs | v6.0.0 released 2026-03-05. Latest. Converts git tag `v1.2.0` → Docker Hub tags `1.2.0`, `1.2`, `1`, `latest` via semver rules. |
-
-**Version pinning strategy:** Use major version tags (`v4`, `v7`) — the Docker team maintains backward compatibility within major versions and applies security patches. All four core Docker actions (`setup-qemu`, `setup-buildx`, `login`, `build-push`) were updated together in March 2026 to Node 24 runtime (required Actions Runner ≥ v2.327.1, which `ubuntu-latest` satisfies).
-
-### Development Tools (local cross-arch testing)
-
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| Docker Desktop (Mac/Linux) | Bundles buildx and QEMU; enables `docker buildx build --platform linux/arm64` locally | Verify with `docker buildx inspect` |
-| `docker buildx ls` | List available builders and their platform support | Run after `setup-buildx-action` in CI to debug platform issues |
+| Library | Version | Purpose | Notes |
+|---------|---------|---------|-------|
+| console_error_panic_hook | 0.1 | Panic messages in browser devtools | No change needed |
+| getrandom | 0.4 (wasm_js feature) | WASM-compatible entropy source | No change needed |
 
 ---
 
-## Dockerfile Structure
+## WASM Boundary Design
 
-The correct multi-stage Dockerfile for this project:
+### Chosen approach: `set_difficulty(level: u8)` method on `WasmGame`
 
-```dockerfile
-# ── Stage 1: Rust build (wasm-pack) ─────────────────────────────────────
-# Runs on the builder's native arch (linux/amd64 on GitHub Actions).
-# Output: pkg/*.wasm + pkg/*.js — both arch-neutral.
-FROM --platform=$BUILDPLATFORM rust:1.94.1-slim AS rust-builder
+Add a `mistake_rate: f64` field to `WasmGame` that stores the active mistake rate. JS calls
+`set_difficulty(level)` once when the player changes the dropdown (or on page load to restore
+a persisted value). `computer_move()` reads the stored rate instead of the removed constant.
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+**Why this approach:**
 
-# Install wasm-pack (also installs wasm32-unknown-unknown target)
-RUN curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+| Approach | Decision | Rationale |
+|----------|----------|-----------|
+| `set_difficulty(u8)` stored on WasmGame | **Recommended** | Single method; u8 is the simplest boundary-safe type; state lives where it belongs (on the game struct); JS calls it only on dropdown change or page load |
+| Pass `f64` mistake rate directly to `computer_move` | Rejected | Leaks implementation detail to JS — JS would need to know numeric rates. Difficulty semantics (rate = 0.65 for Easy) belong in Rust, not the caller |
+| Pass `String` ("easy", "medium", ...) | Rejected | Strings cross the WASM boundary with heap allocation; a u8 discriminant is sufficient and has zero overhead |
+| Re-create `WasmGame` on difficulty change | Rejected | Loses active game state; player mid-game would see board reset |
+| Hardcode 4 separate JS-callable functions (`computer_move_easy`, etc.) | Rejected | Explodes the API surface; adding a 5th difficulty level requires a JS change |
+| Export a Rust enum via `#[wasm_bindgen]` | Rejected | wasm-bindgen cannot export Rust enums as typed JS enum values without extra scaffolding; a documented u8 mapping is simpler and equally safe |
 
-WORKDIR /app
-COPY Cargo.toml Cargo.lock ./
-COPY src/ ./src/
+### Why `u8` for the level discriminant
 
-# --release: wasm-opt runs automatically; --target web: ES module output
-RUN wasm-pack build --target web --release
+wasm-bindgen documents that `u8`, `u16`, `u32`, `i32`, `f32`, and `f64` are all represented as
+JavaScript `Number` — zero overhead, no BigInt, no string parsing. `u8` is the smallest
+sufficient integer for 4 levels (0–3). A dropdown `<option value="0">` gives a JS string that
+`parseInt(value, 10)` converts to a Number — standard practice, no special handling needed.
 
-# ── Stage 2: npm/Vite build ──────────────────────────────────────────────
-# Also arch-neutral: produces dist/ of HTML + CSS + JS + .wasm
-FROM --platform=$BUILDPLATFORM node:22-alpine3.23 AS node-builder
+Source: Context7 `/wasm-bindgen/wasm-bindgen` `types/numbers.md` — HIGH confidence.
 
-WORKDIR /app
-COPY package.json package-lock.json vite.config.js index.html ./
-COPY src/ ./src/
-COPY --from=rust-builder /app/pkg ./pkg
+### Concrete Rust changes required
 
-RUN npm ci && npm run build
+**`src/wasm_api.rs` — add field + method, update `computer_move` and `reset`:**
 
-# ── Stage 3: nginx serve ─────────────────────────────────────────────────
-# THIS stage instantiates for each target platform.
-# BuildKit pulls nginx:1.29.8-alpine3.23 for linux/amd64 AND linux/arm64.
-# The dist/ content is identical for both — only nginx binary differs.
-FROM nginx:1.29.8-alpine3.23
+```rust
+#[wasm_bindgen]
+pub struct WasmGame {
+    inner: Game,
+    mistake_rate: f64,  // derived from difficulty; default 0.25 = Medium (existing behavior)
+}
 
-COPY --from=node-builder /app/dist /usr/share/nginx/html
+#[wasm_bindgen]
+impl WasmGame {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> WasmGame {
+        WasmGame {
+            inner: Game::new(),
+            mistake_rate: 0.25,  // Medium is the current shipped default
+        }
+    }
 
-EXPOSE 80
+    /// Set AI difficulty. Level values:
+    ///   0 = Easy       (~65% mistake rate)
+    ///   1 = Medium     (~25% — current default)
+    ///   2 = Hard       (~8%)
+    ///   3 = Unbeatable (0%)
+    /// Unknown values are silently ignored (no state change).
+    pub fn set_difficulty(&mut self, level: u8) {
+        self.mistake_rate = match level {
+            0 => 0.65,
+            1 => 0.25,
+            2 => 0.08,
+            3 => 0.0,
+            _ => self.mistake_rate,  // unknown level: leave unchanged
+        };
+    }
+
+    pub fn computer_move(&mut self) -> u8 {
+        match get_computer_move(&self.inner, self.mistake_rate) {
+            Some(pos) => {
+                let _ = self.inner.make_move(pos);
+                pos as u8
+            }
+            None => 255,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        // Intentionally keep mistake_rate — difficulty persists across games in a session.
+        // The JS side handles cross-session persistence via localStorage.
+        self.inner = Game::new();
+    }
+    // ... all other existing methods unchanged
+}
 ```
 
-**Why `--platform=$BUILDPLATFORM` on stages 1 and 2:**
-- Forces these expensive stages to always run on the builder's native arch (amd64), even when building for arm64
-- Without it, BuildKit would emulate them via QEMU for the arm64 target — making a 3-minute Rust compile take 15-20 minutes
-- Since WASM output is arch-neutral, running stages 1 and 2 natively on amd64 is always correct
+**`src/ai.rs` — remove constant, add parameter:**
 
-**Why `rust:1.94.1-slim` (Debian) not `rust:alpine` (musl):**
-wasm-pack downloads pre-built `wasm-bindgen-cli` binaries that link against glibc. On Alpine (musl libc), these binaries fail with dynamic linker errors. Debian slim uses glibc — the standard ABI these binaries target. Build stage image size doesn't matter since it's discarded.
+```rust
+// REMOVE: const MISTAKE_RATE: f64 = 0.25;
 
----
+// Change signature from:
+pub fn get_computer_move(game: &Game) -> Option<usize>
+// To:
+pub fn get_computer_move(game: &Game, mistake_rate: f64) -> Option<usize>
 
-## GitHub Actions Workflow
-
-```yaml
-name: Publish Docker Image
-
-on:
-  push:
-    tags:
-      - 'v*'              # Triggers on v1.2.0, v1.2.3, etc.
-
-jobs:
-  docker:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ vars.DOCKERHUB_USERNAME }}/tic-tac-toe
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v4
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+// Replace:
+if rng.random_bool(MISTAKE_RATE) {
+// With:
+if rng.random_bool(mistake_rate) {
+// All other logic is identical.
 ```
 
-**Key workflow choices explained:**
-- `tags: 'v*'` — triggers only on version tags, not every commit push; no accidental publishes
-- `docker/metadata-action` — `v1.2.3` tag → Docker Hub publishes `1.2.3`, `1.2`, `1` (and `latest` via the major pattern)
-- `cache-from/cache-to: type=gha` — GitHub Actions cache for BuildKit layers; Rust compilation takes 2–5 min cold; with layer cache subsequent builds are ~30s for CSS/JS changes
-- `push: true` — multi-arch manifests can only be pushed to a registry, not loaded locally (without containerd image store setup)
-- `${{ vars.DOCKERHUB_USERNAME }}` — use GitHub Actions variable (not secret) for the username; `${{ secrets.DOCKERHUB_TOKEN }}` for the access token
+The only change is adding `mistake_rate: f64` as a second parameter and deleting the module
+constant. All minimax logic, draw handling, and return types are unchanged.
+
+**`src/ai.rs` — Unbeatable mode (mistake_rate = 0.0) requires no special case:**
+
+`rng.random_bool(0.0)` in the rand crate returns `false` because `random_bool(p)` returns
+`true` with probability `p`. At p = 0.0 it is always false — the mistake branch is never
+taken, and minimax always runs. No special-casing needed.
+
+**Existing tests in `src/ai.rs`:**
+
+All tests call `get_computer_move(&game)` (one argument). After the signature change they must
+call `get_computer_move(&game, 0.25)` to preserve current behavior. The tests themselves need
+no other changes — their assertions remain valid.
+
+### JS side changes (minimal)
+
+```javascript
+// On dropdown change (new event listener):
+difficultySelect.addEventListener('change', () => {
+    const level = parseInt(difficultySelect.value, 10);
+    game.set_difficulty(level);
+    saveDifficulty(level);  // localStorage, same pattern as mute
+});
+
+// On page load (restore from localStorage):
+const savedLevel = loadDifficulty();  // returns 0-3, default 1
+game.set_difficulty(savedLevel);
+difficultySelect.value = String(savedLevel);
+
+// computer_move() call in JS is UNCHANGED — no arguments added.
+```
+
+No new JS imports, no new npm packages, no changes to the Vite config.
 
 ---
 
-## WASM-Specific Cross-Compilation Notes
+## What NOT to Add
 
-### What requires NO cross-compilation
-
-| Artifact | Reason |
-|----------|--------|
-| `.wasm` binary | Architecture-neutral bytecode — runs on any WASM runtime |
-| wasm-bindgen JS glue (`pkg/*.js`) | Pure JavaScript |
-| Vite `dist/` output | HTML, CSS, JS, `.wasm` — all arch-neutral |
-
-### What requires per-arch binaries (handled by BuildKit automatically)
-
-| Artifact | How handled |
-|----------|-------------|
-| nginx server binary | BuildKit pulls `nginx:1.29.8-alpine3.23` manifest for the correct target arch |
-
-### wasm-opt availability in Docker
-
-`wasm-pack --release` runs `wasm-opt` automatically. The `rust:1.94.1-slim` base image (Debian Bookworm) has the necessary system libraries. If wasm-opt fails in CI (it does on some stripped environments), add `--no-opt` to the wasm-pack invocation — the binary will be ~10–30% larger but functionally identical.
+| Avoid | Why |
+|-------|-----|
+| `serde` / `serde-wasm-bindgen` | No complex types cross the boundary; u8 is sufficient |
+| `js_sys` or `wasm_bindgen::JsValue` | Not needed; all types crossing the boundary are primitives |
+| New npm packages | JS needs only `parseInt` and a localStorage read — both already in use |
+| Passing `f64` mistake rate from JS | Leaks difficulty-to-rate mapping to JS; that logic belongs in Rust |
+| Difficulty enum exported via `#[wasm_bindgen]` | Requires non-trivial scaffolding; a u8 with documented values is equivalent and simpler |
+| A separate `DifficultyWasmGame` type or subclass | Over-engineering; difficulty is a single field on the existing struct |
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Rust build base | `rust:1.94.1-slim` (Debian/glibc) | `rust:alpine` (musl) | wasm-bindgen-cli prebuilt binaries require glibc; fails on musl without source compilation |
-| WASM cross-compilation | Single native build (amd64), arch-neutral WASM output | Compile Rust targeting aarch64 natively | Unnecessary complexity — WASM output is not ISA-specific |
-| Vite build location | Separate Node stage in Dockerfile | Build `dist/` outside Docker, COPY in | Multi-stage keeps CI reproducible; no local artifacts to manage |
-| nginx version | `nginx:1.29.8-alpine3.23` (mainline pinned) | `nginx:stable-alpine` (1.26.x floating) | Mainline (1.29.x) has all current security patches; `stable` is older |
-| Multi-arch strategy | QEMU emulation on single amd64 runner | Native matrix (separate arm64 runner per platform) | QEMU is simpler for a static site. For compiled server apps with long builds, native runners win. |
-| Tag trigger | `tags: 'v*'` | `push: branches: [main]` | Deploy on explicit version tags only; no accidental latest-tag updates on every commit |
-| Caching | `cache-from: type=gha` | `cache-from: type=registry` | GitHub Actions cache is zero-config and free; registry cache requires an additional image push |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| `FROM rust:alpine` as build stage | wasm-bindgen-cli prebuilt binary targets glibc; hits "No such file or directory" on musl Alpine | `FROM rust:1.94.1-slim` (Debian slim) |
-| `--platform linux/arm64` on Rust/Node build stages | Forces QEMU-emulated Rust compilation: 15–20 min vs 3 min native. WASM output is arch-neutral — no benefit. | `--platform=$BUILDPLATFORM` on build stages |
-| Building without layer cache | Cold `cargo build` takes 2–5 minutes; without cache, every CI run pays full cost | `cache-from: type=gha` + `cache-to: type=gha,mode=max` |
-| `latest` as the only Docker Hub tag | Makes rollback impossible; users can't pin to a version | `docker/metadata-action` to also publish `1.2.3`, `1.2`, `1` tags |
-| `docker/build-push-action@v6` or earlier | v6 uses Node 20 runtime; v7 is current (Node 24). All Docker actions updated together in March 2026. | Use `v7` for `build-push-action`, `v4` for the others |
-| Hardcoding Docker Hub password in workflow | Leaks credentials | `${{ secrets.DOCKERHUB_TOKEN }}` — use a scoped Docker Hub Access Token, not the account password |
-| `COPY . .` as first Dockerfile instruction | Invalidates build cache on every source change; Rust recompiles everything | Copy `Cargo.toml`/`Cargo.lock` first, then `src/` — allows cargo dependency layer caching |
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| `set_difficulty(u8)` method | Pass difficulty to constructor: `WasmGame.new(difficulty)` | Only if game objects were always recreated on difficulty change — they are not; reset() must preserve difficulty |
+| Store `mistake_rate: f64` on WasmGame | Store `difficulty: u8` on WasmGame, derive rate in `computer_move` | Either works; storing f64 avoids a match arm on every move call (negligible difference) |
+| u8 discriminant mapped to f64 rate in Rust | u8 discriminant mapped to f64 rate in JS | Use JS mapping only if JS needed to display the numeric rate; it does not — it only needs the label string |
 
 ---
 
 ## Version Compatibility
 
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| docker/setup-qemu-action@v4 | docker/setup-buildx-action@v4, docker/build-push-action@v7 | All use @docker/actions-toolkit 0.77–0.87 range; released together March 2026 |
-| docker/login-action@v4 | docker/build-push-action@v7 | Same actions-toolkit version family; v4.1.0 is latest |
-| docker/metadata-action@v6 | docker/build-push-action@v7 | Metadata `outputs.tags` and `outputs.labels` consumed directly as build-push inputs |
-| `rust:1.94.1-slim` | wasm-pack 0.14.0 | wasm-pack installer script works on Debian Bookworm (glibc 2.36). Confirmed. |
-| `node:22-alpine3.23` | Vite 8.x, npm 10.x | Node 22 LTS is fully compatible with Vite 8. npm comes bundled. |
-| `nginx:1.29.8-alpine3.23` | linux/amd64, linux/arm64, linux/arm/v7, linux/386, linux/s390x, linux/ppc64le | Multi-arch manifest verified on Docker Hub 2026-04-14 |
-| `docker/build-push-action@v7` | Actions Runner ≥ v2.327.1 | Node 24 runtime requirement. `ubuntu-latest` on GitHub Actions satisfies this. |
+All `Cargo.toml` version constraints are unchanged. No `cargo update` is required.
+
+| Package | Current pin | Change needed |
+|---------|-------------|---------------|
+| wasm-bindgen | 0.2 | None — `u8`/`f64` method parameters verified supported |
+| wasm-pack | 0.14.0 | None |
+| rand | 0.10 | None — `random_bool(f64)` accepts a plain f64 parameter |
+| getrandom | 0.4 (wasm_js) | None |
 
 ---
 
 ## Sources
 
-- Docker Hub `nginx` tags (live, 2026-04-14) — nginx 1.29.8-alpine3.23 confirmed multi-arch (HIGH confidence)
-- Docker Hub `rust` tags (live, 2026-04-14) — rust:1.94.1-slim confirmed amd64+arm64 (HIGH confidence)
-- Docker Hub `node` tags (live, 2026-04-14) — node:22-alpine3.23 LTS confirmed multi-arch (HIGH confidence)
-- GitHub Releases: docker/setup-buildx-action v4.0.0 (2026-03-05) — https://github.com/docker/setup-buildx-action/releases (HIGH confidence)
-- GitHub Releases: docker/build-push-action v7.1.0 (2026-04-10) — https://github.com/docker/build-push-action/releases (HIGH confidence)
-- GitHub Releases: docker/login-action v4.1.0 (2026-04-02) — https://github.com/docker/login-action/releases (HIGH confidence)
-- GitHub Releases: docker/setup-qemu-action v4.0.0 (2026-03-04) — https://github.com/docker/setup-qemu-action/releases (HIGH confidence)
-- GitHub Releases: docker/metadata-action v6.0.0 (2026-03-05) — https://github.com/docker/metadata-action/releases (HIGH confidence)
-- Docker official docs — Multi-platform images with GitHub Actions — https://docs.docker.com/build/ci/github-actions/multi-platform/ (HIGH confidence)
-- WebAssembly.org — Portability spec — https://webassembly.org/docs/portability/ (HIGH confidence) — confirms WASM is arch-neutral bytecode
+- Context7 `/wasm-bindgen/wasm-bindgen` (`types/numbers.md`) — u8 represented as JS Number, no BigInt; HIGH confidence
+- Context7 `/wasm-bindgen/wasm-bindgen` (`getter-and-setter.md`) — `&mut self` method pattern on exported struct; HIGH confidence
+- `src/wasm_api.rs` (read directly) — existing WasmGame boundary, current `computer_move` signature
+- `src/ai.rs` (read directly) — MISTAKE_RATE constant, `get_computer_move` signature, rand usage pattern
+- `Cargo.toml` (read directly) — wasm-bindgen 0.2, rand 0.10, getrandom 0.4 confirmed
 
 ---
 
-*Stack research for: Docker multi-arch deployment, Rust/WASM + Vite static site*
-*Researched: 2026-04-14*
+*Stack research for: Rust/WASM difficulty level boundary — v1.4 Difficulty Levels milestone*
+*Researched: 2026-04-27*

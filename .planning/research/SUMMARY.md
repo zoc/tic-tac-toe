@@ -1,207 +1,121 @@
 # Project Research Summary
 
-**Project:** Tic-Tac-Toe WASM — v1.2 Docker Deployment
-**Domain:** Docker multi-architecture deployment — Rust/WASM + Vite static site containerization
-**Researched:** 2026-04-14
-**Confidence:** HIGH — all sources are official Docker/nginx/GitHub Actions documentation
+**Project:** Tic-Tac-Toe WASM — v1.4 Difficulty Levels
+**Domain:** Browser game AI parameterization, WASM boundary design
+**Researched:** 2026-04-27
+**Confidence:** HIGH
 
 ## Executive Summary
 
-v1.2 is a pure infrastructure milestone — the game itself is frozen. The goal is to package the existing `dist/` output (HTML + CSS + JS + `.wasm`) as a multi-arch Docker image served by nginx and publish it to Docker Hub via GitHub Actions on git tag push. This is a well-understood pattern with excellent official documentation and no significant unknowns.
+Adding difficulty levels to this game is a well-scoped, low-risk milestone. The entire feature reduces to a single architectural change: replacing one compile-time constant (`MISTAKE_RATE: f64 = 0.25` in `src/ai.rs`) with a runtime parameter that flows from a UI dropdown through the WASM boundary into the AI function. No new dependencies are required — the existing stack (Rust, wasm-bindgen 0.2, wasm-pack 0.14.0, rand 0.10, vanilla JS, localStorage) supports every capability needed.
 
-The single most important architectural insight is that **WebAssembly is architecture-neutral bytecode**. The Rust/wasm-pack build does not need to run twice for amd64 and arm64 — the `.wasm` output is identical for both. Only the nginx binary in the serve stage differs per arch, which Docker's multi-arch manifest handles automatically. This means the Dockerfile's build stages should use `--platform=$BUILDPLATFORM` to run on the native runner architecture, and only the final nginx stage needs to instantiate per-platform via BuildKit. Without this, the arm64 Rust compile runs under QEMU emulation and becomes 10–30× slower — turning a 3-minute build into a 15–30 minute one.
+The recommended WASM API design is a `set_difficulty(level: u8)` method on the existing `WasmGame` struct, storing a derived `mistake_rate: f64` field internally. JS sends only a level index (0–3); Rust owns the rate mapping. The UI is a native `<select>` element styled with existing CSS variables. Difficulty persists via a new `ttt-difficulty` localStorage key and triggers a game reset on change.
 
-The main risks are configuration mistakes rather than architectural unknowns: missing `.dockerignore` (sends gigabytes of `target/` to the Docker daemon), wrong MIME type for `.wasm` in nginx (breaks WASM streaming compilation in browsers), and credential hygiene (use Docker Hub access tokens scoped to the repo, not the account password). All are preventable at authoring time and straightforward to verify with a smoke test.
-
----
+The primary risks are all implementation-level: silent NaN coercion at the WASM boundary when unparsed strings are passed, a mid-game async race condition if difficulty is changed during the 300–800ms thinking delay, and inadvertently touching the existing `ttt-score` localStorage key. All three have clear prevention patterns and require no architectural rethinking.
 
 ## Key Findings
 
-### Stack Additions
+### Recommended Stack
 
-This milestone adds **only infrastructure tooling** — no changes to Rust/JS/CSS codebase.
+No new dependencies. wasm-bindgen 0.2 already supports `u8` as a native boundary type (JS `Number`). The `u8` design is preferred over `f64` across the boundary because it eliminates NaN/Infinity/out-of-range coercion risk — all silent in Rust, all returning `0`. Rate-to-level mapping belongs in Rust in a single `match` arm.
 
-**New Docker base images (verified on Docker Hub 2026-04-14):**
-- `rust:1.94.1-slim` — Rust build stage; Debian slim (glibc) required because wasm-bindgen-cli prebuilt binaries link against glibc, not musl; `rust:alpine` breaks wasm-pack
-- `node:22-alpine3.23` — Vite build sub-stage; Node 22 LTS on Alpine (~54 MB); multi-arch
-- `nginx:1.29.8-alpine3.23` — Final serve image; ~24 MB; multi-arch manifest covers amd64, arm64, arm/v7, and more
+**Boundary type: `set_difficulty(level: u8)`**
+- `0` = Easy (~65% mistake rate)
+- `1` = Medium (~25% mistake rate)
+- `2` = Hard (~8% mistake rate)
+- `3` = Unbeatable (0% mistake rate)
 
-**New GitHub Actions (all latest as of 2026-04-14):**
-- `docker/setup-qemu-action@v4` — ARM64 emulation on amd64 runner
-- `docker/setup-buildx-action@v4` — Multi-platform BuildKit builder
-- `docker/login-action@v4` — Docker Hub authentication
-- `docker/build-push-action@v7` — Multi-arch build + push (Node 24 runtime)
-- `docker/metadata-action@v6` — Semver tags from git tag (`v1.2.0` → `1.2.0`, `1.2`, `1`, `latest`)
+`rng.random_bool(0.0)` in rand 0.10 always returns `false` — Unbeatable works with no special case.
 
-**New files to create (no existing files change):**
-- `Dockerfile` — multi-stage build
-- `.dockerignore` — excludes `target/`, `node_modules/`, `pkg/`, `dist/`
-- `nginx.conf` — WASM MIME type, gzip, Cache-Control, try_files
-- `.github/workflows/docker-publish.yml` — tag-triggered CI/CD
-- Docker Hub README / repo README section
+### Expected Features
 
-**Version compatibility confirmed:**
-- `docker/build-push-action@v7` requires Actions Runner ≥ v2.327.1 (`ubuntu-latest` satisfies)
-- All Docker actions updated together March 2026 to Node 24 runtime; use `v4`/`v6`/`v7` major pins
+**Must have (table stakes):**
+- 4 named difficulty levels with perceptibly distinct AI behavior
+- Persistent setting that survives page refresh (localStorage)
+- Game resets when difficulty changes (prevents mid-game inconsistency)
+- Difficulty selector disabled during active AI thinking
 
-### Feature Table Stakes
+**Should have (differentiators):**
+- Default difficulty of Medium on first visit (matches existing behavior)
+- Dropdown styled to match existing dark navy/red theme
 
-**Must have for v1.2 launch (all P1):**
-- **Multi-stage Dockerfile** — build stage (`rust:slim` + `node:alpine`) → serve stage (`nginx:alpine` only). Without it, the image is ~2 GB.
-- **.dockerignore** — must exist before first `docker build`. `target/` alone can be 1–3 GB.
-- **Custom nginx.conf** — `application/wasm` MIME type (browsers reject WASM without it), gzip, `Cache-Control: immutable` for Vite hashed assets, `no-cache` for `index.html`, `try_files` for SPA routing.
-- **HEALTHCHECK** — 1 line; enables container orchestrators to detect silent nginx failures.
-- **Multi-arch manifest (amd64 + arm64)** — arm64 is now dominant for VPS providers (AWS Graviton, Hetzner, Oracle Free Tier). amd64-only runs under emulation on arm64 — bad for game responsiveness.
-- **GitHub Actions CI on git tag push** — `on: push: tags: ['v*']`; no push on every commit.
-- **OCI image labels** — auto-generated by `docker/metadata-action`; enables Renovate/Dependabot image tracking.
-- **GHA layer cache** — `cache-from/cache-to: type=gha,mode=max`; reduces warm build from ~10 min to ~3 min.
-- **README usage docs** — `docker pull` + `docker run` examples; Docker Hub description.
-
-**Defer to v1.3+:**
-- Docker Compose example in repo
-- Security headers (X-Content-Type-Options, X-Frame-Options, CSP) — low priority for a game with no auth/user data
-- ARM v7 platform (32-bit Raspberry Pi) — extremely slow under QEMU; add only on request
-- GitHub Container Registry (ghcr.io) mirror
+**Defer (v2+):**
+- Per-difficulty score tracking (explicitly out of scope for this milestone)
+- "You can't win" callout for Unbeatable (user chose not to show it)
+- Animated difficulty change transitions
 
 ### Architecture Approach
 
-Four new files, zero changes to existing code. The Dockerfile has two stages: a heavy build stage (`rust:1.94.1-slim`) that installs wasm-pack, Node, and npm then runs `wasm-pack build --target web --release` followed by `npm run build`, producing `dist/`; and a lean serve stage (`nginx:1.29.8-alpine3.23`) that copies only `dist/` plus a custom `nginx.conf`. Both build stages carry `--platform=$BUILDPLATFORM` so they always run native on the amd64 CI runner. BuildKit builds the serve stage twice (once per platform) and creates a multi-arch manifest pointing to the correct nginx binary per arch, with identical static file content in both.
+5 files change, 0 new files created. The change is mechanical: `src/ai.rs` removes the constant and adds a parameter; `src/wasm_api.rs` adds a field and method; `src/main.js`, `index.html`, and `src/style.css` add the selector and persistence wiring.
 
-**Major components and responsibilities:**
+**Modified files:**
+1. `src/ai.rs` — remove `MISTAKE_RATE` const, add `mistake_rate: f64` param to `get_computer_move`
+2. `src/wasm_api.rs` — add `mistake_rate` field to `WasmGame`, add `set_difficulty(u8)` method, preserve through `reset()`
+3. `index.html` — add `<select id="difficulty">` element
+4. `src/style.css` — style dropdown with existing CSS variables
+5. `src/main.js` — wire `loadDifficulty/saveDifficulty`, call `set_difficulty` on init + change, disable during play
 
-| Component | Responsibility |
-|-----------|----------------|
-| `Dockerfile` build stage | Install Rust + wasm-pack + Node; compile WASM; run Vite build; produce `dist/` |
-| `Dockerfile` serve stage | nginx:alpine + `dist/` + `nginx.conf`; the final ~10 MB image |
-| `nginx.conf` | WASM MIME type, gzip compression, Cache-Control headers, SPA `try_files` routing |
-| `.dockerignore` | Exclude `target/`, `node_modules/`, `pkg/`, `dist/`, `.git/` from build context |
-| `docker-publish.yml` | Tag-triggered GitHub Actions workflow: QEMU → Buildx → Login → Meta → Build+Push |
-
-**Layer cache optimization order (critical for CI speed):**
-1. `COPY Cargo.toml Cargo.lock` → `COPY package.json package-lock.json` → `RUN npm ci` (cached until lockfiles change)
-2. `COPY src/ index.html vite.config.js` → `RUN wasm-pack build` → `RUN npm run build` (invalidates on source change)
-3. wasm-pack **must** run before Vite — Vite imports `pkg/tic_tac_toe.js` which doesn't exist until wasm-pack runs
+**Build order dependency:** Rust must compile (`wasm-pack build`) before JS integration can be tested.
 
 ### Critical Pitfalls
 
-1. **QEMU-emulated Rust compile (10–30× slowdown)** — Use `FROM --platform=$BUILDPLATFORM rust:1.94.1-slim` and `FROM --platform=$BUILDPLATFORM node:22-alpine3.23` on build stages. WASM output is arch-neutral; there is zero reason to compile Rust under arm64 emulation. Without this, an arm64 build takes 15–30 min vs 3 min native. Must be in the Dockerfile from line 1 — not patched in after a slow build.
-
-2. **Missing `application/wasm` MIME type** — Always `include /etc/nginx/mime.types;` in `nginx.conf` AND add an explicit `types { application/wasm wasm; }` block. Without it, nginx serves `.wasm` as `application/octet-stream` and browsers throw `WebAssembly.compileStreaming(): Response has unsupported MIME type`. The game returns 200 OK but silently fails to initialize — the worst kind of bug. Verify with: `curl -I http://localhost/assets/*.wasm | grep content-type`.
-
-3. **Missing `.dockerignore`** — Create before first `docker build`. The Rust `target/` directory is 1–3 GB. Without `.dockerignore`, every build transfers gigabytes before a single `FROM` executes. Both `target/` AND `node_modules/` must be excluded — ignoring only one is a common mistake for Rust+Node projects.
-
-4. **Multi-arch build without `--push` is invisible** — `docker buildx build --platform linux/amd64,linux/arm64` without `--push` exits 0 but stores nothing in the local Docker image store. Multi-arch manifests can only be stored in a registry. For local testing use single-platform: `docker buildx build --platform linux/amd64 --load -t test .`
-
-5. **Docker Hub password vs. access token** — Use a repository-scoped Docker Hub access token stored as `secrets.DOCKERHUB_TOKEN`. Store the username as `vars.DOCKERHUB_USERNAME` (not a secret — it's public). Never use the account password in CI. Tokens are revocable without changing the account password.
-
----
+1. **Silent WASM coercion** — `parseInt(select.value)` is mandatory before calling `set_difficulty()`. Passing a raw string silently coerces to `0` (Easy) in Rust. Prevention: always `parseInt`, add a Rust `match` with a fallback arm.
+2. **Async race condition** — The 300–800ms thinking delay creates a window for mid-game difficulty changes. Prevention: disable the dropdown when `isProcessing` is true, mirroring the existing `isProcessing` guard pattern.
+3. **Wrong localStorage key** — Using `ttt-score` instead of a new `ttt-difficulty` key corrupts existing user score data. Prevention: use `'ttt-difficulty'` (matching the `'ttt-score'` / `'ttt-muted'` naming convention).
+4. **Rate inversion bug** — `MISTAKE_RATE` is counterintuitive: higher value = more mistakes = easier. Easy is `0.65`, Hard is `0.08`. Prevention: define a named `mistake_rate_for_level(u8) -> f64` function with a match arm and a comment.
+5. **resetGame() dropdown leak** — The function does not currently manage the dropdown's enabled state. If the dropdown is disabled at game start, it must be explicitly re-enabled in `resetGame()`. Prevention: add `setDifficultyEnabled(true)` call inside `resetGame()`.
 
 ## Implications for Roadmap
 
-This milestone has a clear natural dependency order — each phase's output is required input for the next. Three phases are suggested.
+Suggested phase structure: **2 phases**
 
-### Phase 1: Dockerfile + nginx Config
+### Phase 13: Rust AI Parameterization & WASM API
 
-**Rationale:** Everything else depends on a correct Dockerfile. CI can't be wired up until the image builds and produces a correct output. This is the core deliverable — everything else is automation and docs on top of it.
+**Rationale:** Hard dependency — Rust must compile before JS can call `set_difficulty`. All pitfall-prevention decisions (u8 vs f64, rate mapping direction, test update pattern) must be locked here before any JS is written.
 
-**Delivers:** A locally-buildable, locally-testable Docker image that serves the game correctly at ~10 MB.
+**Delivers:** Parameterized `get_computer_move`, `set_difficulty(u8)` on `WasmGame`, updated test suite, rebuilt WASM pkg.
 
-**Implements:**
-- `Dockerfile` (multi-stage; `--platform=$BUILDPLATFORM` on build stages; layer-cache-optimized COPY order)
-- `.dockerignore` (Rust + Node dual-ecosystem exclusions; must exist before first `docker build`)
-- `nginx.conf` (WASM MIME type, gzip, Cache-Control immutable on `/assets/`, `no-cache` on root, `try_files` SPA routing)
-- HEALTHCHECK and EXPOSE 80 instructions
+**Addresses:** Easy/Medium/Hard/Unbeatable AI behavior
+**Avoids:** Silent coercion (boundary type decision), rate inversion (named mapping function), test breakage
 
-**Avoids:** QEMU slowness pitfall, WASM MIME type pitfall, bloated image pitfall, `.dockerignore` pitfall.
+### Phase 14: UI Integration & Persistence
 
-**Verification gate before Phase 2:**
-- `docker buildx build --platform linux/amd64 --load -t tic-tac-toe:test .` succeeds
-- `docker image ls tic-tac-toe:test` shows <20 MB
-- `docker run --rm -p 8080:80 tic-tac-toe:test` → game loads at http://localhost:8080
-- `curl -I http://localhost:8080/assets/*.wasm` shows `Content-Type: application/wasm`
+**Rationale:** Depends on Phase 13 WASM output. Pure frontend work: HTML, CSS, JS wiring.
 
-### Phase 2: GitHub Actions CI/CD
+**Delivers:** `<select>` dropdown in UI, localStorage persistence (`ttt-difficulty`), game reset on change, dropdown disabled during AI thinking.
 
-**Rationale:** CI automates the release workflow. Only wire it up after the Dockerfile is verified correct locally — debugging a broken Dockerfile through 5-minute CI loops is painful and wastes GitHub Actions minutes.
-
-**Delivers:** Automated multi-arch publish to Docker Hub on `git tag v* && git push --tags`.
-
-**Implements:**
-- `.github/workflows/docker-publish.yml` (QEMU → Buildx → Login → Meta → Build+Push)
-- Docker Hub repository created + repository-scoped access token generated
-- GitHub repository secrets/variables configured (`DOCKERHUB_TOKEN` secret, `DOCKERHUB_USERNAME` variable)
-- Semver tag strategy via `docker/metadata-action@v6` (`v1.2.0` → `1.2.0`, `1.2`, `1`, `latest`)
-- GHA layer cache (`cache-from/cache-to: type=gha,mode=max`)
-
-**Avoids:** Password vs. token pitfall, `latest`-on-every-push pitfall, multi-arch without `--push` pitfall.
-
-**Verification gate before Phase 3:**
-- `git tag v1.2.0 && git push --tags` triggers workflow and completes without error
-- `docker manifest inspect user/tic-tac-toe:1.2.0` shows both `linux/amd64` and `linux/arm64`
-- `docker run --rm -p 8080:80 user/tic-tac-toe:1.2.0` → game works
-
-### Phase 3: Documentation
-
-**Rationale:** README must reference the real published image name with the real tag. Write it last, after Phase 2 confirms the image name and `docker pull` command. Can't write accurate docs for something that doesn't exist yet.
-
-**Delivers:** Docker Hub README + repository README section with complete usage instructions.
-
-**Implements:**
-- `docker pull` command with correct image reference
-- `docker run` one-liner (`-p 8080:80`)
-- Architecture note (multi-arch: works on ARM VPS and x86 alike)
-- Reverse proxy note (Caddy / nginx upstream)
-- Docker Compose snippet (bonus; v1.3 candidate if time allows)
+**Uses:** Existing localStorage pattern from score/mute persistence
+**Implements:** Dropdown disable/enable guard mirroring `isProcessing` pattern
 
 ### Phase Ordering Rationale
 
-- **Dockerfile before CI:** CI is a thin wrapper around `docker buildx build`. Debugging Dockerfile issues through CI feedback loops is slow and expensive. Get the local build right first.
-- **`.dockerignore` in Phase 1, not separate:** It's a 10-line file that must exist before `docker build` is ever run — inseparable from Dockerfile authoring.
-- **nginx.conf in Phase 1, not later:** The WASM MIME type correctness must be verified locally before CI is wired up. If MIME type is wrong, the game silently fails to initialize — a local smoke test catches this in seconds vs. debugging in production.
-- **Documentation last:** The `docker pull` command in the README must match the real image name. Can't write it until Phase 2 publishes the image.
+- Rust → JS is a hard build dependency, not a preference
+- Locking the `u8` boundary type in Phase 13 prevents JS call-site rework in Phase 14
+- `resetGame()` dropdown wiring belongs with dropdown creation in Phase 14 — not split across phases
+- Test suite updates belong in Phase 13 so CI passes before Phase 14 begins
 
 ### Research Flags
 
-**All phases have standard, well-documented patterns — no `/gsd-research-phase` needed:**
-- **Phase 1 (Dockerfile):** Docker multi-stage build with `--platform=$BUILDPLATFORM` is the official Docker recommendation. STACK.md and ARCHITECTURE.md contain complete reference Dockerfiles.
-- **Phase 2 (CI/CD):** Docker's official GitHub Actions docs provide exact workflow YAML. All action versions verified. STACK.md contains a complete reference workflow.
-- **Phase 3 (Docs):** Writing task — no technical research needed.
-
----
+No phases require deeper research:
+- **Phase 13:** wasm-bindgen u8/f64 boundary types verified via official docs; rand `random_bool(0.0)` behavior confirmed
+- **Phase 14:** localStorage pattern identical to existing `ttt-muted` / `ttt-score` implementations
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All image tags and action versions verified live against Docker Hub and GitHub Releases 2026-04-14 |
-| Features | HIGH | Official Docker + nginx + GitHub Actions docs; no community inference; all features are established patterns |
-| Architecture | HIGH | `--platform=$BUILDPLATFORM` is the official Docker recommendation; WASM arch-neutrality confirmed by WebAssembly spec |
-| Pitfalls | HIGH | Each pitfall verified against official docs; WASM MIME type requirement confirmed by MDN Fetch spec |
+| Stack | HIGH | wasm-bindgen boundary types verified via Context7; no new dependencies confirmed |
+| Features | HIGH | Solved domain; all features derived from direct codebase inspection |
+| Architecture | HIGH | All 5 modified files inspected; change is mechanical |
+| Pitfalls | HIGH | WASM coercion from official docs; race condition and localStorage pitfalls from direct code reading |
 
-**Overall confidence: HIGH**
+**Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Docker Hub repository name:** The workflow uses `${{ vars.DOCKERHUB_USERNAME }}/tic-tac-toe` — decide the exact image name before writing the workflow; the Docker Hub repo must be created manually before Phase 2.
-- **GitHub repository secrets/variables:** `DOCKERHUB_TOKEN` (secret) and `DOCKERHUB_USERNAME` (variable) must be configured in GitHub repo settings before the first tag push. One-time manual step — not automatable.
-- **wasm-pack PATH after `curl | sh` install:** wasm-pack installs to `~/.cargo/bin/`. The Dockerfile may need `ENV PATH="/root/.cargo/bin:${PATH}"` after the install step. Verify during Phase 1 build.
-- **wasm-opt in Docker:** `wasm-pack --release` runs `wasm-opt` automatically. If it fails on `rust:1.94.1-slim` (rare), fall back to `--no-opt` — binary is ~10–30% larger but functionally identical.
+- **Mistake rate calibration** (65%/25%/8%) — tunable in one Rust match arm; validate with manual play session after implementation
+- **Default difficulty** — Medium recommended (matches existing 25% rate); Easy defensible for first-time UX
 
 ---
-
-## Sources
-
-### Primary (HIGH confidence)
-- Docker Hub live API — `nginx:1.29.8-alpine3.23`, `rust:1.94.1-slim`, `node:22-alpine3.23` multi-arch manifests confirmed 2026-04-14
-- Docker official docs: Multi-platform builds — https://docs.docker.com/build/building/multi-platform/
-- Docker official docs: GitHub Actions multi-platform — https://docs.docker.com/build/ci/github-actions/multi-platform/
-- Docker official docs: GitHub Actions cache backend — https://docs.docker.com/build/cache/backends/gha/
-- nginx official docs: ngx_http_gzip_module, ngx_http_headers_module, ngx_http_core_module
-- GitHub Releases: docker/setup-qemu-action v4.0.0, docker/setup-buildx-action v4.0.0, docker/login-action v4.1.0, docker/build-push-action v7.1.0, docker/metadata-action v6.0.0
-- MDN: WebAssembly/instantiateStreaming — MIME type requirement (`Content-Type: application/wasm`)
-- WebAssembly.org portability spec — confirms WASM is architecture-neutral bytecode
-- Direct codebase inspection: `vite.config.js`, `package.json`, `Cargo.toml`, `src/` structure
-
----
-*Research completed: 2026-04-14*
+*Research completed: 2026-04-27*
 *Ready for roadmap: yes*

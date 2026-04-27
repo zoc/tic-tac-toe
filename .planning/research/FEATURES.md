@@ -1,334 +1,225 @@
-# Feature Landscape
+# Feature Research
 
-**Domain:** Docker multi-architecture deployment of a static web game (Rust/WASM + Vite)
-**Milestone scope:** v1.2 Docker Deployment — containerize, publish, document
-**Researched:** 2026-04-14
-**Confidence:** HIGH (Docker official docs + nginx official docs + GitHub Actions official docs)
+**Domain:** Difficulty levels for a browser single-player tic-tac-toe game (Rust/WASM + vanilla JS)
+**Milestone scope:** v1.4 Difficulty Levels
+**Researched:** 2026-04-27
+**Confidence:** HIGH — tic-tac-toe AI difficulty is a fully-solved, well-understood domain; patterns are stable and canonical
 
 ---
 
 ## Context: What Already Exists
 
-v1.1 is complete. The following are already built and validated:
+This is a subsequent milestone on an existing, polished game. The following are already built and validated:
 
 | Already Built | Implementation |
 |---------------|----------------|
-| Vite 8 production build | `npm run build` → `dist/` containing HTML, CSS, JS, `.wasm` |
-| Static file output | `dist/` is fully self-contained — no server-side processing needed |
-| WASM-specific asset handling | `build.target: 'esnext'`, WASM files output alongside JS |
-| Content-addressed filenames | Vite hashes JS/CSS: `assets/index-Dv3Lk8xT.js` — suitable for long-lived caching |
-| `package.json` build scripts | `npm run build` is the single entry point for a production build |
+| Minimax AI with 25% mistake rate | `src/ai.rs` — `MISTAKE_RATE: f64 = 0.25` constant; `rng.random_bool(MISTAKE_RATE)` short-circuits minimax |
+| WASM API | `computer_move()` on `WasmGame` — calls `get_computer_move(&self.inner)` which reads `MISTAKE_RATE` at compile time |
+| localStorage persistence | `SCORE_KEY = 'ttt-score'` — `loadScore()` / `saveScore()` pattern with try/catch for incognito |
+| Score display | `score-wins`, `score-losses`, `score-draws` DOM elements, updated via `updateScoreDisplay()` |
+| Thinking delay | `THINK_MIN = 300`, `THINK_MAX = 800` ms — cancelable via `clearTimeout(thinkingTimer)` |
+| Theme | Dark navy/red (`--bg: #1a1a2e`, `--accent: #e94560`) — full dark/light via `prefers-color-scheme` |
+| UI controls | Mute button, New Game button — styled with `restart-btn` / `mute-btn` classes |
 
-**This milestone is pure infrastructure** — the game itself doesn't change. All features are about packaging, serving, publishing, and documenting the container.
-
----
-
-## Table Stakes (Every Docker-Deployed Static Site Must Have These)
-
-Features that operators and users expect. Missing any of these = broken or unprofessional deployment.
-
-| Feature | Why Expected | Complexity | v1.2? | Notes |
-|---------|--------------|------------|-------|-------|
-| Multi-stage Dockerfile (build + serve) | The build stage installs Rust, wasm-pack, Node — tools that have no place in the final image. Final image must contain only nginx + `dist/`. Without multi-stage, the image would be 2–3 GB (Rust toolchain alone is ~1.5 GB). | MEDIUM | ✅ Yes | Build stage: `node:20-alpine` + install Rust + wasm-pack. Serve stage: `nginx:alpine`. |
-| `nginx:alpine` as final base image | nginx:alpine is the canonical choice for static sites: ~5 MB base, battle-tested static file serving, gzip built-in, official multi-arch manifest (amd64/arm64/arm32v7/etc). The Debian nginx variant is 40+ MB for no benefit here. | LOW | ✅ Yes | `FROM nginx:alpine` — currently at 1.28.3-alpine or 1.29.8-alpine (mainline). |
-| EXPOSE 80 declaration | Documents the container's listening port. Required for `docker run -P` to work. Consumers of the image expect to know the port without reading docs. | LOW | ✅ Yes | `EXPOSE 80` in Dockerfile. |
-| `.dockerignore` file | Without it, the entire build context (including `target/`, `node_modules/`, `.git/`) is sent to the Docker daemon — slowing builds massively and risking secrets leaking into layers. `target/` alone can be 500 MB+ (Rust build artifacts). | LOW | ✅ Yes | Exclude: `target/`, `node_modules/`, `.git/`, `dist/`, `*.md`, `.planning/`. |
-| Single-command `docker run` UX | Operators pulling from Docker Hub expect `docker run -p 8080:80 user/repo:tag` to Just Work. No volume mounts, no env vars, no config files needed — it's a static site. | LOW | ✅ Yes | Image must be fully self-contained. No mandatory configuration at runtime. |
-| Semantic version tags on Docker Hub | `latest` alone is insufficient for production deployments. Users need `v1.2.0` pinned tags to know what they're running and reproduce deployments. | LOW | ✅ Yes | `docker/metadata-action` with semver pattern generates both `v1.2.0` and `latest` automatically from git tag. |
-| Multi-arch manifest (amd64 + arm64) | arm64 is now the dominant architecture for VPS providers (AWS Graviton, Hetzner ARM, Oracle ARM Free Tier). An amd64-only image runs under emulation on arm64 with significant performance overhead. A multi-arch manifest transparently serves the right binary for each host. | MEDIUM | ✅ Yes | `docker buildx` + QEMU via `docker/setup-qemu-action`. `--platform linux/amd64,linux/arm64`. |
-| GitHub Actions CI on tag push | Manual `docker buildx build --push` is error-prone and requires local credentials. Automated CI triggered by `git tag v1.2.0 && git push --tags` is the standard release workflow. | MEDIUM | ✅ Yes | Trigger: `on: push: tags: ['v*']`. Steps: QEMU → Buildx → Login → Build+Push. |
-| README / usage docs | Operators pulling from Docker Hub need to know: how to run it, what port, how to update, how to put it behind a reverse proxy. Docker Hub README is the first thing users read. | LOW | ✅ Yes | README section with `docker pull`, `docker run`, compose snippet, reverse proxy note. |
+**The AI mistake rate is a compile-time constant.** Parameterizing it at runtime is the core technical change for this milestone — it requires passing a difficulty value through JS → WASM → Rust.
 
 ---
 
-## Differentiators (Notably Better Than Minimal Setup)
+## Table Stakes (Users Expect These)
 
-Features not strictly required but that make the deployment meaningfully better — better performance, better operations, better security.
+Features users assume exist when a difficulty selector is present. Missing any of these makes the feature feel broken or amateur.
 
-| Feature | Value Proposition | Complexity | v1.2? | Notes |
-|---------|-------------------|------------|-------|-------|
-| Custom nginx.conf with gzip compression | nginx default config has `gzip off`. Enabling gzip for HTML/CSS/JS reduces transfer sizes by 60–70%. For a WASM game, the `.wasm` file (33 KB) and JS bundle compress well. Mobile users on slow connections benefit meaningfully. Requires `gzip_types` to include `application/wasm application/javascript text/css`. | LOW | ✅ Yes | ~15-line nginx snippet. `gzip on; gzip_comp_level 6; gzip_min_length 1000; gzip_vary on; gzip_types text/html text/css application/javascript application/wasm;` |
-| Cache-Control headers for Vite hashed assets | Vite content-hashes all JS/CSS/WASM filenames. These files are immutable — `main-Dv3Lk8xT.js` will never change contents while that hash exists. Setting `Cache-Control: public, max-age=31536000, immutable` (1 year) on `/assets/*` eliminates repeat download costs. `index.html` must stay `no-cache` so browsers fetch fresh asset references. | LOW | ✅ Yes | Two nginx `location` blocks: `/assets/` with `immutable` header, `/ ` with `no-cache`. |
-| HEALTHCHECK instruction in Dockerfile | Allows container orchestrators (Docker Compose, Swarm, Kubernetes) to detect when nginx crashes silently. A failed health check triggers restart policies. Without it, a container with dead nginx shows as "running" indefinitely. | LOW | ✅ Yes | `HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost/ || exit 1` (wget is available in Alpine). |
-| OCI image labels (org.opencontainers.image.*) | Provides machine-readable metadata: source repository URL, version, creation timestamp, description. `docker/metadata-action` generates these automatically. Enables tooling (Docker Scout, Renovate, Dependabot) to track image provenance and suggest updates. | LOW | ✅ Yes | `docker/metadata-action` outputs labels automatically. Pass to `build-push-action` via `labels: ${{ steps.meta.outputs.labels }}`. |
-| Build cache in GitHub Actions | Rust/wasm-pack builds are slow (60–90 seconds cold). GitHub Actions can cache the `~/.cargo/registry` and `target/` directories between runs. Warm builds with unchanged Rust code take 10–15 seconds instead. | MEDIUM | ✅ Yes | `actions/cache` for `~/.cargo/registry`, `~/.cargo/git`, `target/`. Key: `cargo-${{ hashFiles('**/Cargo.lock') }}`. |
-| `COPY --chown=nginx:nginx` for file ownership | Files COPYed into an nginx image default to root ownership. nginx worker processes run as the `nginx` user (uid 101). While static file serving works without correct ownership, it's a best-practice hygiene issue and prevents subtle permission errors if the nginx config is customized. | LOW | ✅ Yes | `COPY --chown=nginx:nginx --from=builder /app/dist /usr/share/nginx/html` |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Difficulty selector visible before game starts | Users need to set difficulty before the first move, not mid-game | LOW | A `<select>` or equivalent placed above the board, visible at page load |
+| Selected difficulty shows as current value | The control must reflect the active level — a dropdown that resets to default on page load (when a non-default was saved) feels broken | LOW | Read persisted value during init; set `select.value` before first render |
+| Difficulty persists across page refresh | The same localStorage pattern used for score and mute — users don't expect to re-choose on every visit | LOW | New localStorage key e.g. `ttt-difficulty`; load in `main()` alongside score load |
+| AI behavior actually changes per level | If Easy feels the same as Hard, the feature is meaningless. The levels must be perceptibly different to a casual player | MEDIUM | Mistake rates must be calibrated: Easy is noticeably beatable, Hard is noticeably hard, Unbeatable never loses |
+| Difficulty change takes effect for next game, not mid-game | Changing difficulty mid-game and having the AI immediately switch strategy is jarring and confusing | LOW | Read the difficulty setting when `computer_move()` is called (or at `resetGame()`), not reactively during a live game |
+| Four named levels with clear labels | "Easy / Medium / Hard / Unbeatable" is the canonical naming in this domain — casual players understand these labels without explanation | LOW | Single `<select>` with four `<option>` elements — no custom widget needed |
 
 ---
 
-## Differentiators: Future Consideration (v1.3+)
+## Differentiators (Competitive Advantage)
 
-Features that have genuine value but are out of scope for the initial deployment milestone.
+Features that go beyond the bare minimum and make the difficulty system feel polished.
 
-| Feature | Value Proposition | Complexity | Why Defer |
-|---------|-------------------|------------|-----------|
-| Docker Compose example in repo | Makes local VPS deployment a `docker compose up` one-liner | LOW | Useful but not blocking. Add in v1.3 if there's user demand. |
-| Security scanning (Trivy/Snyk in CI) | Automatically reports CVEs in the final image | MEDIUM | Adds CI complexity and noise for a simple nginx:alpine image. Defer until image has users. |
-| nginx `server_tokens off` + security headers | X-Content-Type-Options, X-Frame-Options, CSP | LOW | Game has no auth, no user data. Security headers add value for real apps but are low priority for a game. |
-| ARM v7 platform (linux/arm/v7) | Supports 32-bit Raspberry Pi 3/4 | LOW | The Rust wasm-pack build stage requires arm64-compatible or x86 tools. arm/v7 QEMU emulation is extremely slow for Rust compilation. Add only if users request it. |
-| GitHub Container Registry (ghcr.io) mirror | Publish to both Docker Hub and ghcr.io | LOW | Docker Hub is sufficient for the initial release. ghcr.io avoids rate limits for GitHub-hosted users. |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Difficulty label visible in status area during gameplay | "Playing on Hard" or a small badge near the board reminds the player which level they are on, reducing confusion after level switches | LOW | Small text below or beside the scoreboard — does not need to be prominent |
+| Single shared score across all difficulties | Removes the need for per-difficulty score tracking; the tally reflects overall play history regardless of level. Simpler UX than per-level scores, which fragment the scoreboards and create "what counts?" questions | LOW | Already the target requirement — the existing `SCORE_KEY` object stays as-is |
+| Dropdown styled to match the existing theme | A browser-default `<select>` on the dark navy background looks out of place in most browsers. Matching the `--accent` / `--surface` / `--text` CSS variables makes the selector feel native to the game | LOW | CSS `select` styling with `background: var(--surface)`, `color: var(--text)`, `border: 1px solid var(--accent)`, `border-radius: 6px` — no JS widget needed |
+| Difficulty change resets current game | Changing from Easy to Hard mid-game should start fresh (the board position that was playable on Easy might be unwinnable on Hard). Immediate reset on change avoids a confusing half-played game under wrong conditions | LOW | `select.addEventListener('change', resetGame)` — reuses existing `resetGame()` entirely |
+| Accessible dropdown (keyboard + screen reader) | A native `<select>` element is keyboard-navigable and announced by screen readers without extra ARIA markup | LOW | Native `<select>` provides this for free — no custom dropdown widget required |
 
 ---
 
 ## Anti-Features (Commonly Done, Actively Harmful)
 
-Features that seem reasonable but make the deployment worse.
-
-| Anti-Feature | Why It Seems Reasonable | Why Problematic | What to Do Instead |
-|--------------|------------------------|-----------------|-------------------|
-| **Bloated final image** (shipping build tools) | "Easier to debug in production" | A Rust + Node build environment is 1.5–3 GB. nginx:alpine serving static files is ~25 MB. 100x size difference with zero benefit — Rust and npm are not needed at runtime for a static site. | Strict multi-stage: build stage keeps all tools; `COPY --from=builder dist/ /usr/share/nginx/html` in the serve stage copies only outputs. |
-| **Running nginx as root** | "Simpler configuration" | Security vulnerability. If the nginx process is compromised, root access means full container control. | Use `nginx:alpine` official image — it already drops privileges: master process runs as root (for port 80 binding) but worker processes run as `nginx` user (uid 101). No manual `USER` instruction needed. |
-| **No `.dockerignore`** | "I'll add it later" | The `target/` directory (500 MB+ Rust artifacts) and `node_modules/` are sent as build context without it. Slow builds, potential secret leakage from `.env` files, large layer cache invalidation. | Add `.dockerignore` in the first commit alongside the Dockerfile. Must exist before `docker build` is ever run. |
-| **Pinning to `latest` tag only** | "Always get the latest nginx" | `nginx:latest` resolves to mainline (currently 1.29.8) — Debian-based, ~55 MB. `nginx:alpine` is only ~5 MB and equally stable. `latest` tag changes unpredictably, breaking reproducible builds. | Pin to `nginx:alpine` (tracks latest stable Alpine-based release). Consider pinning to a specific version like `nginx:1.28-alpine` (stable branch) for maximum reproducibility. |
-| **Hardcoded Docker Hub credentials in workflow** | "Works immediately" | Credentials in YAML = credentials in git history = security incident. | Use `secrets.DOCKERHUB_TOKEN` (Docker Hub access token, not password) stored in GitHub repository secrets. |
-| **Single-platform build only (amd64)** | "Simpler to start" | arm64 is now mainstream for VPS (AWS Graviton, Hetzner, Oracle Free Tier). An amd64-only image runs under QEMU emulation on arm64 — 3–10x slower. This is especially bad for a game (UI responsiveness). | Multi-arch from day one using `docker buildx` + QEMU. The CI setup cost is minimal (3 extra lines in GitHub Actions). |
-| **COPY the entire repo into the final image** | "Simple COPY . ." | Copies `.git/`, `.planning/`, `src/` (Rust source), `Cargo.toml`, test files, everything into the final image. Increases image size, exposes source code unnecessarily, slows builds. | Multi-stage: COPY only `dist/` from the build stage. Final image contains only nginx binary + HTML/CSS/JS/WASM. |
-| **`gzip_static` module without pre-compressed assets** | "Better performance" | `gzip_static` serves pre-compressed `.gz` files for zero CPU overhead. But Vite doesn't generate `.gz` files by default — `vite-plugin-compression` would need to be added. If `.gz` files are missing, nginx falls back to dynamic gzip anyway. Unnecessary complexity for this project. | Use standard `ngx_http_gzip_module` (dynamic compression). CPU cost for static files with nginx is negligible. |
-| **`CMD` override for nginx config** | "More control" | Replacing nginx's default CMD with a custom entrypoint shell script adds complexity for no benefit on a static site. | Mount or COPY a custom `nginx.conf` to `/etc/nginx/conf.d/default.conf`. Let nginx's own entrypoint handle startup. |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| **Per-difficulty score tracking** | "Wins on Unbeatable should count separately from Easy wins" | Fragments the scoreboard into four counters each, requires UI to show which row belongs to which level, and creates "which score resets?" questions when difficulty changes. Tic-tac-toe is a 30-second game — the score is a feel-good counter, not analytics | Single shared score tally — already the design decision in the milestone spec |
+| **Custom dropdown widget (JS-driven)** | "Browser `<select>` looks inconsistent across OS/browser" | Custom dropdowns require ARIA roles (`listbox`, `option`), keyboard handling (arrow keys, Enter, Escape, Home/End), click-outside dismiss, and mobile touch handling — easily 80+ LOC and a common source of accessibility regressions. The game is vanilla JS with no framework. | Native `<select>` styled with CSS. It inherits all browser keyboard and accessibility behavior for free. Light CSS (`background`, `color`, `border`, `border-radius`, `padding`) is sufficient to match the theme |
+| **Difficulty affects thinking delay timing** | "Unbeatable should 'think' longer; Easy should respond instantly" | The thinking delay (300–800 ms) already feels natural. Tying delay to difficulty adds complexity and can create frustrating wait times on hard levels with no perceived benefit — the AI is instant regardless of the delay | Keep thinking delay constant across all levels. The delay exists for UX feel, not to simulate computation time |
+| **Showing the AI's "reasoning"** (highlighting candidate moves) | "Educational — show why the AI picked a cell" | Tic-tac-toe minimax is not explainable in a glanceable way. Showing candidate moves would require additional WASM API surface, DOM overlays, and animation work for a feature that most casual players would find confusing rather than helpful | Status messages ("Computer is thinking…") provide sufficient feedback |
+| **Mid-game difficulty switch without reset** | "Let me change difficulty without losing my board position" | A board position that is winnable on Easy (AI makes mistakes) is not the same game on Hard (AI plays optimally). The game state is no longer meaningful. Seamless mid-game switching would require complex state reconciliation | Reset on difficulty change — `select.addEventListener('change', resetGame)`. Clean state, no ambiguity |
+| **Score reset when difficulty changes** | "The score should reflect only this difficulty level" | Resets score on every difficulty change, wiping progress. Punishes casual exploration of difficulty levels. Contradicts the "single shared score" design goal | Never reset score on difficulty change. Score is a cross-session, cross-difficulty counter |
+| **Difficulty stored in URL hash / query param** | "Shareable links with a specific difficulty pre-selected" | Adds URL parsing logic, must handle invalid values, and creates an inconsistency: URL param vs. localStorage — which wins? | localStorage only. The game is single-player and single-session. URL params add complexity with no use case |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Multi-stage Dockerfile]
-    └──requires──> .dockerignore (must exist before first build)
-    └──requires──> `npm run build` produces dist/ (already validated)
-    └──outputs──> final nginx:alpine image with dist/ files
+[Difficulty Selector UI]
+    └──requires──> [WASM API: parameterized difficulty]
+                       └──requires──> [Rust: difficulty parameter to get_computer_move()]
+                                          └──builds-on──> [Existing: minimax + MISTAKE_RATE constant]
 
-[Custom nginx.conf]
-    └──requires──> Multi-stage Dockerfile (needs a serve stage to configure)
-    └──provides──> gzip compression
-    └──provides──> Cache-Control headers
-    └──enables──> HEALTHCHECK (healthcheck wget hits nginx which serves custom config)
+[Difficulty Persistence]
+    └──builds-on──> [Existing: localStorage loadScore/saveScore pattern]
+    └──requires──> [Difficulty Selector UI]
 
-[HEALTHCHECK]
-    └──requires──> nginx:alpine (wget available in Alpine base)
-    └──requires──> EXPOSE 80 declared
+[Difficulty Change → Reset Game]
+    └──builds-on──> [Existing: resetGame() function]
+    └──requires──> [Difficulty Selector UI]
 
-[GitHub Actions CI]
-    └──requires──> Multi-stage Dockerfile (builds it)
-    └──requires──> Docker Hub account + access token (external dependency)
-    └──requires──> QEMU setup (for arm64 emulation on amd64 runner)
-    └──requires──> docker buildx (for multi-arch)
-    └──outputs──> multi-arch manifest on Docker Hub
+[Styled Dropdown]
+    └──builds-on──> [Existing: CSS variables --surface, --text, --accent, --text-dim]
+    └──requires──> [Difficulty Selector UI]
 
-[OCI image labels]
-    └──requires──> docker/metadata-action in CI
-    └──requires──> GitHub Actions CI workflow
-    └──enhances──> Docker Hub discoverability
-
-[Build cache in CI]
-    └──requires──> GitHub Actions CI workflow
-    └──enhances──> GitHub Actions CI (reduces build time)
-    └──no effect on final image
-
-[README / usage docs]
-    └──requires──> Published Docker Hub image (to have a real pull command)
-    └──depends-on──> All above features being validated first
+[Single Shared Score]
+    └──builds-on──> [Existing: SCORE_KEY, score object, saveScore/loadScore]
+    └──no new dependency — deliberate non-change
 ```
 
 ### Dependency Notes
 
-- **`.dockerignore` must exist before any other Dockerfile work** — building without it on a Rust project means sending 500 MB+ build context.
-- **Custom nginx.conf enables both gzip and cache headers** — these two features are implemented in the same file, so they should be built together.
-- **GitHub Actions CI requires all Dockerfile work to be done first** — the workflow just runs `docker buildx build`. The Dockerfile must be correct before CI is wired up.
-- **README is the last step** — it documents the final `docker pull` command with the real image name, which isn't known until the image is published.
+- **Rust change is the critical path.** `get_computer_move()` currently reads `MISTAKE_RATE` as a compile-time constant. It must become a runtime parameter. This requires: changing the Rust function signature, updating `wasm_api.rs` to pass the value through, and updating `main.js` to pass the difficulty-derived rate when calling `computer_move()`.
+- **WASM API boundary decision.** Two options: (a) pass `mistake_rate: f64` directly into `computer_move()` as a JS argument, or (b) store difficulty on the `WasmGame` struct and set it via a separate WASM method. Option (a) is simpler for vanilla JS. Option (b) keeps difficulty state in Rust and is cleaner for the Rust model.
+- **localStorage pattern is already proven.** The `loadScore` / `saveScore` pattern with `try/catch` for SecurityError handles incognito mode correctly. The difficulty persistence should use the identical pattern with a new key.
+- **Difficulty change reuses resetGame() entirely.** No new reset logic is needed. The event listener on `select.change` can call the existing `resetGame()` directly.
 
 ---
 
-## MVP Definition for v1.2
+## MVP Definition for v1.4
 
-### Launch With (v1.2 — all required)
+### Launch With (v1.4 — all required)
 
-- [ ] **Multi-stage Dockerfile** — core deliverable; without this, nothing else works
-- [ ] **.dockerignore** — must be created alongside Dockerfile (not after)
-- [ ] **Custom nginx.conf** with gzip + Cache-Control headers — small cost, big win for users
-- [ ] **HEALTHCHECK** — 1 line in Dockerfile, makes the image production-appropriate
-- [ ] **Multi-arch build** (amd64 + arm64) — arm64 VPS users are the primary audience
-- [ ] **GitHub Actions CI** triggered on git tag push — automates the release workflow
-- [ ] **OCI image labels** — generated automatically by `docker/metadata-action`
-- [ ] **Build cache in CI** — dramatically reduces CI time for Rust builds
-- [ ] **README usage docs** — Docker Hub README + repo README section
+- [ ] **Rust: runtime mistake rate** — `get_computer_move(game, mistake_rate: f64)` replaces compile-time constant; existing minimax unchanged
+- [ ] **WASM API: difficulty-aware computer_move** — `computer_move(mistake_rate: f64)` or `set_difficulty(level: u8)` + `computer_move()` on `WasmGame`
+- [ ] **Four difficulty levels with calibrated rates** — Easy (~70% random), Medium (~40% random), Hard (~10% random), Unbeatable (0% random, pure minimax)
+- [ ] **Dropdown selector in HTML** — native `<select>` with four `<option>` elements, placed above the board
+- [ ] **CSS styling for dropdown** — matches existing dark/light theme via CSS variables; no JS widget
+- [ ] **Difficulty persisted to localStorage** — new key (e.g. `ttt-difficulty`), loaded on init, saved on change
+- [ ] **Difficulty change triggers game reset** — `select.addEventListener('change', resetGame)` — reuses existing function
+- [ ] **Score remains shared** — no change to existing `SCORE_KEY` or score object structure
 
-### Add After Validation (v1.3+)
+### Add After Validation (v1.x)
 
-- [ ] **Docker Compose example** — add after confirming users deploy via docker run
-- [ ] **`nginx:1.28-alpine` version pin** — add if stability over freshness is preferred
-- [ ] **Security headers** (X-Content-Type-Options, CSP) — if the game gets real users
+- [ ] **Difficulty label in status area** — small indicator of current level while playing; only if users find levels confusing
+- [ ] **ARIA label on difficulty selector** — `aria-label="Difficulty"` for screen reader users; trivial to add
 
 ### Future Consideration (v2+)
 
-- [ ] **GitHub Container Registry mirror** — if Docker Hub rate limits become a problem
-- [ ] **ARM v7 platform** — only if Raspberry Pi users request it
-- [ ] **Security scanning in CI** — when image complexity justifies it
+- [ ] **Difficulty affects board size** (4×4 harder mode) — completely out of scope; changes game rules
+- [ ] **Custom mistake rate slider** — power-user feature; not needed for 4-level system
+- [ ] **Per-difficulty high score** — would require redesigning the scoreboard; defer until there's user demand
 
 ---
 
 ## Feature Prioritization Matrix
 
-| Feature | Operator Value | Implementation Cost | Priority |
-|---------|----------------|---------------------|----------|
-| Multi-stage Dockerfile | HIGH | MEDIUM | P1 |
-| .dockerignore | HIGH | LOW | P1 |
-| Multi-arch manifest (amd64+arm64) | HIGH | MEDIUM | P1 |
-| GitHub Actions CI on tag push | HIGH | MEDIUM | P1 |
-| gzip compression (nginx.conf) | HIGH | LOW | P1 |
-| Cache-Control headers (nginx.conf) | HIGH | LOW | P1 |
-| HEALTHCHECK | MEDIUM | LOW | P1 |
-| OCI image labels | MEDIUM | LOW | P1 |
-| Build cache in CI | MEDIUM | MEDIUM | P1 |
-| README / usage docs | HIGH | LOW | P1 |
-| Docker Compose example | MEDIUM | LOW | P2 |
-| Security headers | LOW | LOW | P3 |
-| ARM v7 platform | LOW | HIGH | P3 |
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Runtime mistake rate in Rust | HIGH | LOW | P1 |
+| WASM API update | HIGH | LOW | P1 |
+| Four calibrated difficulty levels | HIGH | LOW | P1 |
+| Dropdown selector HTML | HIGH | LOW | P1 |
+| CSS-styled dropdown | MEDIUM | LOW | P1 |
+| localStorage persistence | MEDIUM | LOW | P1 |
+| Difficulty change → reset | HIGH | LOW | P1 |
+| Single shared score (non-change) | HIGH | LOW (no-op) | P1 |
+| Difficulty label in status | LOW | LOW | P2 |
+| ARIA label on select | LOW | LOW | P2 |
 
 **Priority key:**
-- P1: Must have for v1.2 launch
+- P1: Must have for v1.4 launch
 - P2: Should have, add when possible
 - P3: Nice to have, future consideration
 
 ---
 
-## Complexity Details by Feature
+## Difficulty Level Calibration
 
-| Feature | Effort Estimate | Key Challenge |
-|---------|----------------|---------------|
-| Multi-stage Dockerfile | 60–90 min | Installing Rust + wasm-pack in Docker; correct stage boundary; arm64 Rust cross-compile in build stage |
-| .dockerignore | 5 min | None — it's a simple text file |
-| Custom nginx.conf | 15 min | Correct MIME type for `.wasm` (`application/wasm`); gzip_types list; location block specificity order |
-| HEALTHCHECK | 5 min | None — copy from template |
-| GitHub Actions workflow | 30–45 min | QEMU + Buildx setup order; secrets configuration; tag trigger pattern; metadata-action semver config |
-| Build cache in CI | 15 min | Correct cache key based on `Cargo.lock` hash |
-| OCI labels | 0 min extra | `docker/metadata-action` generates these automatically; just pass through to build-push-action |
-| README docs | 20–30 min | Writing clear `docker run` examples; VPS reverse proxy note; compose snippet |
+This is the most important design decision in the milestone. The four levels must be perceptibly different.
 
-**Total estimated effort: 3–4 hours** for a complete, production-quality deployment setup.
+| Level | Behavior | Mistake Rate (random move probability) | Expected Human Win Rate vs Random Human Play |
+|-------|----------|----------------------------------------|----------------------------------------------|
+| Easy | Mostly random moves; occasionally plays optimally | ~70% | Human wins most games |
+| Medium | Mix of random and optimal; will block obvious threats sometimes | ~40% | Human wins roughly half |
+| Hard | Mostly optimal; makes occasional mistakes | ~10% | Human rarely wins; requires deliberate play |
+| Unbeatable | Pure minimax — never makes a suboptimal move | 0% | Human can only draw with perfect play; cannot win |
 
----
+**Calibration note:** The existing "beatable" AI runs at 25% mistake rate. This maps closest to Medium. The existing codebase test `test_ai_beatable_in_100_games` asserts at least 1 human win in 100 games with random human play — at 0% mistake rate (Unbeatable), this test would fail and must be excluded or made level-aware.
 
-## Key Technical Details
-
-### Dockerfile Stage Boundary
-
-The critical design question is: **where does the build stage end and the serve stage begin?**
-
-```
-BUILD STAGE (node:20-alpine + Rust + wasm-pack):
-  1. Install Rust toolchain (rustup, wasm32-unknown-unknown target)
-  2. Install wasm-pack
-  3. COPY Cargo.toml, Cargo.lock, src/ → wasm-pack build → outputs pkg/
-  4. COPY package.json, package-lock.json → npm ci
-  5. COPY remaining source → npm run build → outputs dist/
-
-SERVE STAGE (nginx:alpine):
-  COPY --from=builder /app/dist /usr/share/nginx/html
-  COPY nginx.conf /etc/nginx/conf.d/default.conf
-  EXPOSE 80
-  HEALTHCHECK ...
-```
-
-The serve stage contains **only** nginx binary, static files, and nginx config. No Rust, no Node, no npm, no wasm-pack.
-
-### nginx.conf Minimum Required Config
-
-```nginx
-server {
-    listen 80;
-    root /usr/share/nginx/html;
-    index index.html;
-
-    # Correct MIME type for WebAssembly
-    types {
-        application/wasm wasm;
-    }
-    include /etc/nginx/mime.types;
-
-    # Gzip compression
-    gzip on;
-    gzip_comp_level 6;
-    gzip_min_length 1000;
-    gzip_vary on;
-    gzip_types text/html text/css application/javascript application/wasm
-               application/json text/plain text/xml;
-
-    # Long-lived cache for Vite hashed assets
-    location /assets/ {
-        add_header Cache-Control "public, max-age=31536000, immutable";
-    }
-
-    # No cache for index.html (asset references change on rebuild)
-    location / {
-        try_files $uri $uri/ /index.html;
-        add_header Cache-Control "no-cache";
-    }
-}
-```
-
-**Critical:** nginx:alpine's default MIME types file includes `application/wasm` since nginx 1.21.4. However, the custom `server {}` block may override the include. Explicitly adding the wasm type ensures correctness.
-
-### GitHub Actions Workflow Pattern
-
-```yaml
-on:
-  push:
-    tags: ['v*']
-
-steps:
-  - uses: actions/checkout@v5
-  - uses: docker/setup-qemu-action@v4       # ARM64 emulation
-  - uses: docker/setup-buildx-action@v4     # Multi-platform builder
-  - uses: docker/login-action@v4            # Docker Hub auth
-    with:
-      username: ${{ vars.DOCKERHUB_USERNAME }}
-      password: ${{ secrets.DOCKERHUB_TOKEN }}
-  - uses: docker/metadata-action@v5         # Tags + labels from git tag
-    id: meta
-    with:
-      images: user/tic-tac-toe-wasm
-      tags: |
-        type=semver,pattern={{version}}
-        type=semver,pattern={{major}}.{{minor}}
-  - uses: docker/build-push-action@v7
-    with:
-      platforms: linux/amd64,linux/arm64
-      push: true
-      tags: ${{ steps.meta.outputs.tags }}
-      labels: ${{ steps.meta.outputs.labels }}
-      cache-from: type=gha
-      cache-to: type=gha,mode=max
-```
-
-**Note:** `cache-from: type=gha` / `cache-to: type=gha,mode=max` uses GitHub Actions cache for Docker layer caching — this is separate from the `actions/cache` approach for Cargo caches. Both should be used.
+**Unbeatable correctness guarantee:** Tic-tac-toe is a solved game. With perfect minimax and 0% mistake rate, the second player (O = computer) can always force at least a draw. The human (X, first mover) cannot win against a perfect opponent. This is mathematically proven and the codebase minimax already implements it correctly — the only change is removing the `random_bool(MISTAKE_RATE)` short-circuit.
 
 ---
 
-## Pitfall Preview
+## WASM API Design Options
 
-| Topic | Key Risk | Mitigation |
-|-------|----------|-----------|
-| Rust in Docker on arm64 | `node:20-alpine` + rustup on arm64 works, but `musl` target required for Alpine. Rust default target is `x86_64-unknown-linux-gnu`. Must add `wasm32-unknown-unknown` explicitly. | `rustup target add wasm32-unknown-unknown` in Dockerfile |
-| wasm-pack install in Docker | `cargo install wasm-pack` compiles from source — takes 5+ minutes. Use the official install script instead: `curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf \| sh` | Prefer installer script over cargo install |
-| Layer cache invalidation | Copying `Cargo.toml` + `Cargo.lock` before source files lets Docker cache the `cargo build` layer when only JS/CSS changes. Copying everything at once invalidates the Rust build cache on every source change. | Two-step COPY: first manifests, then source |
-| QEMU build time | Rust compilation under QEMU emulation for arm64 on an amd64 runner can take 15–20 minutes. Since WASM is architecture-neutral, the Rust/wasm-pack build stage only needs to run on the native platform — but the final nginx stage must be built for both. | Use `--platform=$BUILDPLATFORM` on the build stage; only the serve stage needs QEMU |
-| `.wasm` MIME type | Some nginx configurations serve `.wasm` as `application/octet-stream`. Browsers may refuse to execute it or show warnings. | Explicit `application/wasm` in nginx config |
-| Docker Hub access token | Using Docker Hub password (not access token) in GitHub secrets is a security anti-pattern. Tokens can be scoped and revoked without changing the password. | Create a Docker Hub access token with "Read & Write" scope for the repository only |
+Two valid approaches for passing difficulty through the JS/WASM boundary:
+
+**Option A: Pass mistake_rate per call**
+```rust
+pub fn computer_move(&mut self, mistake_rate: f64) -> u8
+```
+JS: `game.computer_move(mistakeRateForCurrentLevel)`
+
+- Simpler to implement — one argument added to existing method
+- JS holds the difficulty state; Rust is stateless on this concern
+- Slightly awkward: caller must always supply the rate; rate is not validated by Rust type system
+
+**Option B: Store difficulty on WasmGame struct**
+```rust
+pub fn set_difficulty(&mut self, mistake_rate: f64) { self.mistake_rate = mistake_rate; }
+pub fn computer_move(&mut self) -> u8 // unchanged signature
+```
+JS: `game.set_difficulty(0.0)` on change, then `game.computer_move()` unchanged
+
+- `computer_move()` signature stays the same — less JS call-site change
+- Difficulty is "owned" by the game object — semantically cleaner
+- Requires adding a field to `WasmGame` struct and `set_difficulty()` method
+
+**Recommendation:** Option B (store on struct). The thinking delay guard in `main.js` already calls `game.computer_move()` with no arguments — Option A would require updating that call site and the guard check. Option B changes only `set_difficulty()` call on difficulty change, and `reset()` should preserve or re-apply the current difficulty.
+
+---
+
+## UX Interaction Model
+
+The recommended interaction flow based on standard browser game conventions:
+
+1. **Page load:** Read difficulty from localStorage (default: Medium if not set). Set `select.value`. Initialize game at that difficulty.
+2. **User changes difficulty:** `select.change` event fires → save new difficulty to localStorage → call `resetGame()`. The board clears, the new difficulty is active for the next human move.
+3. **Game plays:** `computer_move()` uses the stored `mistake_rate` — difficulty is opaque to the human during play (no announcement needed).
+4. **Game ends:** Score updates as today — no change. Restart button appears.
+5. **User clicks New Game:** `resetGame()` called — difficulty unchanged, new game starts at the same level.
+6. **Page refresh:** Difficulty loaded from localStorage, score loaded from localStorage. Both persisted independently.
+
+**Score is never reset by difficulty changes.** The score object is untouched by the difficulty feature. This is explicit in the milestone spec and matches the anti-feature analysis above.
 
 ---
 
 ## Sources
 
-- Docker Official Docs: Multi-platform builds — https://docs.docker.com/build/building/multi-platform/ (HIGH confidence)
-- Docker Official Docs: Building best practices — https://docs.docker.com/build/building/best-practices/ (HIGH confidence)
-- Docker Official Docs: Dockerfile reference, HEALTHCHECK — https://docs.docker.com/reference/dockerfile/#healthcheck (HIGH confidence)
-- Docker Hub: nginx official image — https://hub.docker.com/_/nginx (HIGH confidence)
-- nginx Official Docs: ngx_http_gzip_module — https://nginx.org/en/docs/http/ngx_http_gzip_module.html (HIGH confidence)
-- nginx Official Docs: ngx_http_headers_module — https://nginx.org/en/docs/http/ngx_http_headers_module.html (HIGH confidence)
-- GitHub Actions Official Docs: Publishing Docker images — https://docs.github.com/en/actions/use-cases-and-examples/publishing-packages/publishing-docker-images (HIGH confidence)
-- Docker Official Docs: Multi-platform with GitHub Actions — https://docs.docker.com/build/ci/github-actions/multi-platform/ (HIGH confidence)
+- Existing codebase — `/Users/franck/Development/tic-tac-toe/src/ai.rs`: minimax implementation, `MISTAKE_RATE` constant (HIGH confidence — direct inspection)
+- Existing codebase — `/Users/franck/Development/tic-tac-toe/src/wasm_api.rs`: WASM boundary, `computer_move()` signature (HIGH confidence — direct inspection)
+- Existing codebase — `/Users/franck/Development/tic-tac-toe/src/main.js`: localStorage pattern, thinking delay guard, `resetGame()` (HIGH confidence — direct inspection)
+- Tic-tac-toe as a solved game — minimax with perfect play forces at least a draw for O (HIGH confidence — solved 1952, well-documented in game theory)
+- Browser `<select>` accessibility — native element provides keyboard navigation and ARIA semantics without custom implementation (HIGH confidence — MDN / WHATWG HTML spec)
 
 ---
 
-*Feature research for: Docker multi-architecture deployment — Rust/WASM + Vite static site*
-*Milestone: v1.2 Docker Deployment*
-*Researched: 2026-04-14*
+*Feature research for: v1.4 Difficulty Levels — browser tic-tac-toe (Rust/WASM)*
+*Researched: 2026-04-27*
