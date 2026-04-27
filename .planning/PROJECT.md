@@ -8,6 +8,17 @@ A browser-based tic-tac-toe game where a human player (X) plays against a comput
 
 The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
 
+## Current Milestone: v1.4 Difficulty Levels
+
+**Goal:** Let the player choose how hard the computer plays, with the setting persisted across sessions.
+
+**Target features:**
+- 4 difficulty levels: Easy / Medium / Hard / Unbeatable
+- Rust AI parameterized by level (mistake rate tunable per level)
+- Dropdown selector styled to match existing theme
+- Difficulty setting persisted via localStorage
+- Single shared score tally across all difficulties
+
 ## Requirements
 
 ### Validated
@@ -54,7 +65,7 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 
 ## Active Requirements
 
-No active requirements. Project is feature-complete for single-player tic-tac-toe with full CI/CD and distribution pipeline.
+See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
 
 ## Out of Scope
 
@@ -175,4 +186,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after v1.3 milestone completed — CI/CD & Distribution*
+*Last updated: 2026-04-27 — Milestone v1.4 Difficulty Levels started*
