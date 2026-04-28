@@ -1,10 +1,11 @@
 ---
 phase: 14
 slug: difficulty-ui-persistence
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-04-28
+reviewed_at: 2026-04-28
 ---
 
 # Phase 14 — UI Design Contract
@@ -44,9 +45,7 @@ Declared values (multiples of 4):
 
 Exceptions:
 
-- `.title-row` gap is **12px** — already established, retained as-is (not a new value; existing contract)
-- Scoreboard vertical padding is **10px** — existing; retained as-is
-- Touch target minimum for `.difficulty-select` is **28px** height (browser default `<select>` satisfies this natively)
+No exceptions introduced in this phase.
 
 Source: `src/style.css` existing values; no new spacing tokens introduced in this phase.
 
@@ -262,11 +261,11 @@ No animation or transition on the disabled toggle — instantaneous state change
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: FLAG (non-blocking — additive phase, existing hierarchy established)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved 2026-04-28
