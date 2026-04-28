@@ -51,6 +51,22 @@ fn main() {
     println!("   7 | 8 | 9");
     println!();
 
+    let difficulty: u8 = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1)
+        .min(3);
+
+    let difficulty_name = match difficulty {
+        0 => "Easy",
+        1 => "Medium",
+        2 => "Hard",
+        3 => "Unbeatable",
+        _ => "Medium",
+    };
+    println!("  Difficulty: \x1b[1;33m{}\x1b[0m (use 0-3 as first argument to change)", difficulty_name);
+    println!();
+
     let mut game = Game::new();
 
     loop {
@@ -98,7 +114,7 @@ fn main() {
         } else {
             // Computer turn
             println!("  Computer is thinking...");
-            if let Some(mv) = get_computer_move(&game, 1) { // D-07: hardcode Medium; no --difficulty flag
+            if let Some(mv) = get_computer_move(&game, difficulty) {
                 game.make_move(mv).unwrap();
                 println!("  Computer plays \x1b[1;31m{}\x1b[0m", mv + 1);
             }
