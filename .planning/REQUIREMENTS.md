@@ -11,10 +11,10 @@ Let the player choose how hard the computer plays, with the setting persisted ac
 
 ### Difficulty Levels (AI)
 
-- [ ] **AI-01**: User can play against Easy AI that makes frequent mistakes (~65% mistake rate) and is regularly beatable
-- [ ] **AI-02**: User can play against Medium AI that plays at the existing default skill level (~25% mistake rate)
-- [ ] **AI-03**: User can play against Hard AI that rarely makes mistakes (~8% mistake rate) and is challenging to beat
-- [ ] **AI-04**: User can play against Unbeatable AI with perfect minimax play (0% mistake rate) that never loses
+- [x] **AI-01**: User can play against Easy AI that makes frequent mistakes (~65% mistake rate) and is regularly beatable — Validated Phase 13
+- [x] **AI-02**: User can play against Medium AI that plays at the existing default skill level (~25% mistake rate) — Validated Phase 13
+- [x] **AI-03**: User can play against Hard AI that rarely makes mistakes (~8% mistake rate) and is challenging to beat — Validated Phase 13
+- [x] **AI-04**: User can play against Unbeatable AI with perfect minimax play (0% mistake rate) that never loses — Validated Phase 13
 
 ### Difficulty Selector (UI)
 
@@ -49,10 +49,10 @@ Explicitly excluded to prevent scope creep.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AI-01 | Phase 13 | Pending |
-| AI-02 | Phase 13 | Pending |
-| AI-03 | Phase 13 | Pending |
-| AI-04 | Phase 13 | Pending |
+| AI-01 | Phase 13 | Validated |
+| AI-02 | Phase 13 | Validated |
+| AI-03 | Phase 13 | Validated |
+| AI-04 | Phase 13 | Validated |
 | UI-01 | Phase 14 | Pending |
 | UI-02 | Phase 14 | Pending |
 | UI-03 | Phase 14 | Pending |
@@ -66,4 +66,4 @@ Explicitly excluded to prevent scope creep.
 
 ---
 *Requirements defined: 2026-04-27*
-*Last updated: 2026-04-27 — traceability filled after roadmap creation*
+*Last updated: 2026-04-28 — AI-01 through AI-04 validated in Phase 13*

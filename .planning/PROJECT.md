@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished web frontend featuring smooth CSS animations, synthesized sound effects, system dark mode support, score persistence, and an animated win line. The computer is beatable — it plays well but makes occasional mistakes. The game ships as a minimal Docker image (25.9MB) served by nginx with correct WASM MIME types, cache headers, gzip, and a health endpoint.
+A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished web frontend featuring smooth CSS animations, synthesized sound effects, system dark mode support, score persistence, and an animated win line. The computer plays at a configurable difficulty level (Easy / Medium / Hard / Unbeatable) exposed through the WASM API. The game ships as a minimal Docker image (25.9MB) served by nginx with correct WASM MIME types, cache headers, gzip, and a health endpoint.
 
 ## Core Value
 
@@ -72,7 +72,7 @@ See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
 - Multiplayer / two-human mode — single-player focus
 - Online / networked play — local browser only
 - Mobile native app — web only
-- Difficulty selection — single beatable difficulty level
+- Per-difficulty score tracking — single shared score tally keeps existing behavior
 - Player choosing X or O — human is always X
 - Manual dark/light toggle button — pure CSS `@media (prefers-color-scheme)` handles the use case
 - Volume slider — binary mute provides 80% value at 10% complexity
@@ -86,7 +86,7 @@ See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
 - Game logic (board state, AI, win detection) lives entirely in Rust/WASM (~927 LOC)
 - Frontend (rendering, event handling, score display, animations, audio) in HTML/CSS/JS (~762 LOC: 400 JS + 449 CSS — 13 LOC index.html excluded)
 - Vanilla JS + CSS — no framework needed for a 9-cell game
-- AI uses minimax with ~25% mistake injection rate — tunable constant in `src/ai.rs`
+- AI uses minimax with mistake injection rate parameterized by difficulty: 0→65%, 1→25%, 2→8%, 3→0% (unbeatable) via `mistake_rate_for_level(u8)` in `src/ai.rs`; WASM exposes `set_difficulty(u8)` setter
 - Vite 8 dev server + production build; `vite-plugin-wasm` for WASM ESM import
 - `build.target: 'esnext'` replaces `vite-plugin-top-level-await` (incompatible with Vite 8)
 - CSS Grid with explicit `grid-template-rows` required for stable cell sizing
@@ -128,10 +128,25 @@ See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
 | gzip_types excludes application/wasm | WASM pre-optimized by wasm-opt; double-gzip adds CPU cost, negligible benefit | ✓ Validated Phase 9 — text assets gzipped, WASM served pre-compressed |
 | HEALTHCHECK on /healthz (not /) | Dedicated endpoint keeps health probe noise out of nginx access logs | ✓ Validated Phase 9 — HTTP 200 "ok", access_log off |
 | Plain docker build in Quick Start docs | No --platform/buildx prerequisites; works for any local machine | ✓ Validated Phase 10 — simplest copy-paste path for new users |
+| `set_difficulty(level: u8)` WASM API | u8 eliminates silent NaN/Infinity coercion at the JS→Rust boundary; rate mapping stays in Rust | ✓ Validated Phase 13 — wasm-pack build exports method, JS callable |
+| `mistake_rate_for_level(u8) -> f64` match table | Named function with explicit match arms prevents rate inversion bugs; `_ => 0.25` wildcard is safe future-proof fallback | ✓ Validated Phase 13 — all 4 levels verified, 22 tests pass |
+| `reset()` does not touch `difficulty` | Difficulty persists across game resets — player picks level once, not before every game | ✓ Validated Phase 13 — difficulty field survives reset() call |
 
 ## Current State
 
-**Milestone v1.3 complete** (2026-04-25). Production-ready with full CI/CD pipeline:
+**Phase 13 complete** (2026-04-28). Rust AI parameterization and WASM API ready:
+- `mistake_rate_for_level(u8) -> f64` with 4-level match table (Easy 65%, Medium 25%, Hard 8%, Unbeatable 0%)
+- `set_difficulty(&mut self, level: u8)` exposed through WASM boundary — JS can call before `computer_move()`
+- `difficulty: u8` field on `WasmGame` defaults to 1 (Medium), persists across game resets
+- CLI (`main.rs`) accepts difficulty as first arg with clamping to valid range
+- 22 Rust tests pass including `test_ai_unbeatable_never_loses` (50 games, 0 X wins)
+- 13 phases total, 14 plans complete, ~1,700+ LOC game + Docker/nginx config + CI/CD
+- Phase 14 (Difficulty UI & Persistence) ready to plan
+
+<details>
+<summary>v1.3 state (2026-04-25)</summary>
+
+Production-ready with full CI/CD pipeline:
 - GitHub Actions multi-platform Docker builds (linux/amd64 + linux/arm64) triggered on v* tags
 - Docker Hub publishing with semver tag automation (v1.3.0 → 1.3.0, 1.3, 1, latest)
 - OCI image labels (org.opencontainers.image.* annotations) attached via docker/metadata-action v5
@@ -139,6 +154,8 @@ See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
 - README Releasing section with prerequisites, release process, and technical notes
 - Published to Docker Hub as fzoc/tic-tac-toe with full multi-arch support
 - 12 phases total, 13 plans complete, ~1,689 LOC game + Docker/nginx config + CI/CD
+
+</details>
 
 <details>
 <summary>v1.2 state (2026-04-14)</summary>
@@ -186,4 +203,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-27 — Milestone v1.4 Difficulty Levels started*
+*Last updated: 2026-04-28 after Phase 13*
