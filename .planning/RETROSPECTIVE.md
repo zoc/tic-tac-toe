@@ -214,6 +214,73 @@ A production-ready Docker image: multi-stage Dockerfile (Rust/Node build stage â
 
 ---
 
+---
+
+# Retrospective: Milestone v1.4
+
+**Shipped:** 2026-04-28
+**Duration:** 1 day (2026-04-28)
+**Scope:** 2 phases (13-14), 2 plans, 26 commits
+
+---
+
+## What Was Built
+
+Configurable AI difficulty (Easy / Medium / Hard / Unbeatable) backed by a parameterized Rust mistake rate, exposed through the WASM boundary as `set_difficulty(u8)`, and connected to a player-facing dropdown in the browser UI with localStorage persistence and disabled-while-thinking behavior.
+
+---
+
+## What Went Well
+
+**Clean separation between AI layer and UI layer.** Phase 13 (Rust/WASM) and Phase 14 (HTML/CSS/JS) had zero cross-phase coupling issues. The `set_difficulty(u8)` WASM API was a stable contract that Phase 14 could rely on without knowing anything about Rust.
+
+**u8 type at the WASM boundary was the right choice.** No NaN, no Infinity, no silent coercion. The type system enforced correctness at the boundary. The `_ => 0.25` wildcard in the match arm provides a safe future-proof fallback for out-of-range levels.
+
+**`difficultyEl.disabled` mirroring was systematic.** The plan identified all 5 `isProcessing` transition points in advance (1 set-true, 4 set-false) and the implementation matched exactly. No missed exit paths, no stuck-disabled bugs.
+
+**Unconditional `resetGame()` on difficulty change eliminated edge cases.** No need for "are you mid-game?" logic. The board always resets â€” simple, predictable, no stale state.
+
+**All 9 requirements verified in one UAT session, same day as implementation.** 0 issues found across all 5 UI tests. The plan was specific enough that execution was mechanical.
+
+---
+
+## What Could Have Gone Better
+
+**REQUIREMENTS.md UI requirements weren't marked complete after Phase 14.** UI-01 through UI-05 remained "Pending" in the traceability table until milestone close. Same pattern as v1.0 and v1.1. The fix is to mark requirements complete in the phase summary commit, not wait for archival.
+
+---
+
+## Surprises
+
+- The v2 backlog items from the v1.0 retrospective included "Difficulty selector (easy / medium / hard)" â€” that's now shipped in v1.4. The backlog captured the right ideas.
+- Phase 14 execution took ~30 minutes end-to-end (5 tasks, 3 files). The detailed PLAN.md with exact insertion points made it near-mechanical. Planning investment pays off in execution speed.
+
+---
+
+## Decisions That Aged Well
+
+| Decision | Why It Held Up |
+|----------|---------------|
+| `mistake_rate_for_level()` as a named function | Explicit, testable, no rate-inversion risk; `_ => 0.25` wildcard future-proofs it |
+| `reset()` does not touch `difficulty` | Player picks level once â€” no surprising revert on New Game |
+| `ttt-difficulty` localStorage key (not `ttt-score`) | No collision with existing score data; follows naming convention |
+| 5-site `difficultyEl.disabled` mirroring | Covers all async exit paths; FEEL-02 guard + NO_MOVE guard + normal completion + resetGame |
+
+---
+
+## What to Carry Forward
+
+- Mark REQUIREMENTS.md requirements complete in the phase summary commit â€” not at milestone archival
+- WASM boundaries: scalar types (u8, bool, i32) eliminate silent JS coercion bugs; keep rate logic in Rust
+- When a UI control mirrors an async processing flag (`isProcessing`), enumerate all exit paths in the plan before coding â€” missed sites produce subtle stuck-disabled bugs
+- Detailed plan with exact insertion points (line numbers, surrounding code patterns) makes execution near-mechanical with near-zero rework
+
+---
+
+*Written: 2026-04-28*
+
+---
+
 ## Cross-Milestone Trends
 
 *Updated after each milestone. Patterns that persist across multiple milestones.*
@@ -225,6 +292,8 @@ A production-ready Docker image: multi-stage Dockerfile (Rust/Node build stage â
 | v1.0 MVP | 3 | 3 | ~1,373 | 2 days | 44 |
 | v1.1 Polish & Feel | 5 | 5 | ~1,689 | 1 day | 25 |
 | v1.2 Docker Deployment | 2 | 3 | Docker/nginx config | 2 days | ~42 |
+| v1.3 CI/CD & Distribution | 2 | 2 | GitHub Actions YAML | 1 day | ~14 |
+| v1.4 Difficulty Levels | 2 | 2 | ~1,260 LOC (Rust + JS + CSS) | 1 day | 26 |
 
 ### What Consistently Works
 
@@ -233,6 +302,8 @@ A production-ready Docker image: multi-stage Dockerfile (Rust/Node build stage â
 - Verify-first plan structure: static grep checks + human browser approval catches pre-implementation without wasted re-work
 - Pre-implementing polish features alongside core features reduces later phase cost dramatically
 - Defining numbered acceptance criteria before writing implementation makes verification scripted and unambiguous
+- Detailed plans with exact insertion points (line numbers, surrounding code patterns) make execution near-mechanical
+- Scalar WASM boundary types (u8, bool, i32) prevent silent JS coercion bugs at the Rust/JS interface
 
 ### Watch Out For
 
@@ -241,3 +312,4 @@ A production-ready Docker image: multi-stage Dockerfile (Rust/Node build stage â
 - Requirements traceability: mark requirements Complete during phase execution, not after milestone archival
 - Web Audio: always use lazy AudioContext (created on first user gesture) â€” required for Safari/incognito autoplay policy
 - Docker: exclude WASM from gzip_types (pre-optimized by wasm-opt); use `cargo install --locked` for tool pinning in Dockerfiles
+- Async UI controls: enumerate all exit paths for disabled/enabled state before coding â€” missed sites produce stuck-disabled bugs

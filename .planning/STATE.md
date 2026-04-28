@@ -17,10 +17,10 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-28 — Phase 13 complete)
+See: .planning/PROJECT.md (updated 2026-04-28 — v1.4 complete)
 
 **Core value:** The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
-**Current focus:** v1.4 Difficulty Levels — COMPLETE
+**Current focus:** Planning next milestone
 
 ## Current Position
 

@@ -8,16 +8,9 @@ A browser-based tic-tac-toe game where a human player (X) plays against a comput
 
 The human player can play a complete, satisfying game of tic-tac-toe against the computer in their browser — with smooth interactions and clear visual feedback.
 
-## Current Milestone: v1.4 Difficulty Levels
+## Current State
 
-**Goal:** Let the player choose how hard the computer plays, with the setting persisted across sessions.
-
-**Target features:**
-- 4 difficulty levels: Easy / Medium / Hard / Unbeatable
-- Rust AI parameterized by level (mistake rate tunable per level)
-- Dropdown selector styled to match existing theme
-- Difficulty setting persisted via localStorage
-- Single shared score tally across all difficulties
+v1.4 shipped 2026-04-28. All 14 phases complete across 5 milestones. The game is feature-complete for the current scope: playable, polished, containerized, automated CI/CD, and now with configurable AI difficulty. Planning next milestone.
 
 ## Requirements
 
@@ -63,9 +56,18 @@ The human player can play a complete, satisfying game of tic-tac-toe against the
 - [x] Docker Hub credentials securely managed via GitHub Secrets — Validated in Phase 11: GitHub Actions Workflow — v1.3
 - [x] README Releasing section with prerequisites and step-by-step process — Validated in Phase 11: GitHub Actions Workflow — v1.3
 
+### Validated (v1.4)
+
+- ✓ 4 AI difficulty levels: Easy (65% mistake rate), Medium (25%), Hard (8%), Unbeatable (0%) — v1.4
+- ✓ Difficulty selector dropdown in game UI, styled to theme — v1.4
+- ✓ Difficulty persists across page refresh via `ttt-difficulty` localStorage key — v1.4
+- ✓ First visit defaults to Medium — v1.4
+- ✓ Changing difficulty mid-game resets the board immediately — v1.4
+- ✓ Dropdown disabled while computer is calculating — v1.4
+
 ## Active Requirements
 
-See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
+None — all v1.4 requirements shipped. Define next milestone with `/gsd-new-milestone`.
 
 ## Out of Scope
 
@@ -131,17 +133,17 @@ See REQUIREMENTS.md — v1.4 Difficulty Levels (being defined).
 | `set_difficulty(level: u8)` WASM API | u8 eliminates silent NaN/Infinity coercion at the JS→Rust boundary; rate mapping stays in Rust | ✓ Validated Phase 13 — wasm-pack build exports method, JS callable |
 | `mistake_rate_for_level(u8) -> f64` match table | Named function with explicit match arms prevents rate inversion bugs; `_ => 0.25` wildcard is safe future-proof fallback | ✓ Validated Phase 13 — all 4 levels verified, 22 tests pass |
 | `reset()` does not touch `difficulty` | Difficulty persists across game resets — player picks level once, not before every game | ✓ Validated Phase 13 — difficulty field survives reset() call |
+| `difficultyEl.disabled` mirrors `isProcessing` at all 5 transition points | Dropdown must be non-interactive in the same state window as the board; missing any exit path leaves it stuck disabled | ✓ Validated Phase 14 — 1 set-true, 4 set-false sites, UAT UI-05 passed |
+| Unconditional `resetGame()` on difficulty change | No board-state guard needed — always reset so new difficulty applies from move one with no ambiguous partial-game state | ✓ Validated Phase 14 — UAT UI-04 passed |
 
 ## Current State
 
-**Phase 13 complete** (2026-04-28). Rust AI parameterization and WASM API ready:
-- `mistake_rate_for_level(u8) -> f64` with 4-level match table (Easy 65%, Medium 25%, Hard 8%, Unbeatable 0%)
-- `set_difficulty(&mut self, level: u8)` exposed through WASM boundary — JS can call before `computer_move()`
-- `difficulty: u8` field on `WasmGame` defaults to 1 (Medium), persists across game resets
-- CLI (`main.rs`) accepts difficulty as first arg with clamping to valid range
+**v1.4 complete** (2026-04-28). All 14 phases shipped across 5 milestones:
+- `mistake_rate_for_level(u8) -> f64` with 4-level match table; `set_difficulty(&mut self, level: u8)` WASM API
+- Difficulty selector dropdown in title row — persists via `ttt-difficulty` localStorage key
 - 22 Rust tests pass including `test_ai_unbeatable_never_loses` (50 games, 0 X wins)
-- 13 phases total, 14 plans complete, ~1,700+ LOC game + Docker/nginx config + CI/CD
-- Phase 14 (Difficulty UI & Persistence) ready to plan
+- ~1,260+ LOC (Rust AI + frontend + CSS) + Docker/nginx config + GitHub Actions CI/CD
+- Planning next milestone
 
 <details>
 <summary>v1.3 state (2026-04-25)</summary>
@@ -203,4 +205,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after Phase 13*
+*Last updated: 2026-04-28 after v1.4 milestone*

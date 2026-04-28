@@ -1,5 +1,21 @@
 # Milestones
 
+## v1.4 Difficulty Levels (Shipped: 2026-04-28)
+
+**Phases completed:** 2 phases (13-14), 2 plans, 26 commits, 1 day (2026-04-28)
+
+**Key accomplishments:**
+
+- Parameterized Rust AI with `mistake_rate_for_level(u8) -> f64` — 4 levels: Easy 65%, Medium 25%, Hard 8%, Unbeatable 0%; `_ => 0.25` wildcard for future-proof safety
+- Exposed `set_difficulty(&mut self, level: u8)` through the WASM boundary — JS calls before `computer_move()`; difficulty field persists across `reset()` calls; 22 Rust tests all pass including 50-game unbeatable verification
+- Added difficulty selector dropdown (`<select id="difficulty-select">`) to the title row, styled to match dark/light theme, with localStorage persistence via `ttt-difficulty` key
+- Mid-game difficulty change triggers unconditional `resetGame()` — board clears, new level applies from move one; no stale state possible
+- `difficultyEl.disabled` mirrors `isProcessing` at all 5 async transition points — dropdown non-interactive while computer calculates, re-enables on all exit paths
+
+**Archive:** `.planning/milestones/v1.4-ROADMAP.md` · `.planning/milestones/v1.4-REQUIREMENTS.md`
+
+---
+
 ## v1.3 CI/CD & Distribution (Shipped: 2026-04-25)
 
 **Phases completed:** 2 phases (11-12), 2 plans, ~14 commits, 1 day (2026-04-25)
