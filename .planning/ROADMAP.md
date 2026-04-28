@@ -88,12 +88,14 @@ Plans:
   3. A player visiting for the first time sees Medium pre-selected
   4. Changing the difficulty mid-game immediately resets the board so the new AI level applies from move one
   5. The difficulty dropdown is disabled (non-interactive) while the computer is calculating its move
-**Plans**: TBD
-**UI hint**: yes
+**Plans**: 1 plan
+
+Plans:
+- [ ] 14-01-PLAN.md — Add difficulty HTML, CSS, localStorage helpers, DOM ref, startup sequence, change handler, and disabled mirroring
 
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 13. Rust AI Parameterization & WASM API | 1/1 | Complete | 2026-04-28 |
-| 14. Difficulty UI & Persistence | 0/TBD | Not started | - |
+| 14. Difficulty UI & Persistence | 0/1 | Not started | - |
