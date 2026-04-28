@@ -58,7 +58,7 @@ See archive: `.planning/milestones/v1.3-ROADMAP.md`
 
 **Milestone Goal:** Let the player choose how hard the computer plays, with the setting persisted across sessions.
 
-- [ ] **Phase 13: Rust AI Parameterization & WASM API** - Parameterize AI mistake rate by difficulty level and expose `set_difficulty(u8)` through the WASM boundary
+- [x] **Phase 13: Rust AI Parameterization & WASM API** - Parameterize AI mistake rate by difficulty level and expose `set_difficulty(u8)` through the WASM boundary — completed 2026-04-28
 - [ ] **Phase 14: Difficulty UI & Persistence** - Add dropdown selector to the game UI, wire localStorage persistence, and integrate with game reset and thinking-delay guard
 
 ## Phase Details
@@ -76,7 +76,7 @@ See archive: `.planning/milestones/v1.3-ROADMAP.md`
 **Plans**: 1 plan
 
 Plans:
-- [ ] 13-01-PLAN.md — Parameterize AI, extend WASM API, update all call sites, verify build
+- [x] 13-01-PLAN.md — Parameterize AI, extend WASM API, update all call sites, verify build — completed 2026-04-28
 
 ### Phase 14: Difficulty UI & Persistence
 **Goal**: The player can pick a difficulty from a dropdown in the UI, the choice survives page refresh, and the dropdown stays disabled while the computer is thinking
@@ -95,5 +95,5 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 13. Rust AI Parameterization & WASM API | 0/1 | Not started | - |
+| 13. Rust AI Parameterization & WASM API | 1/1 | Complete | 2026-04-28 |
 | 14. Difficulty UI & Persistence | 0/TBD | Not started | - |
