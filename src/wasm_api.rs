@@ -85,12 +85,15 @@ impl WasmGame {
     }
 
     /// Ask the AI to make a move. Returns the chosen position (0-8),
-    /// or 255 if the game is already over.
+    /// or 255 if the game is already over or if the move could not be applied.
     pub fn computer_move(&mut self) -> u8 {
         match get_computer_move(&self.inner, self.difficulty) { // D-05
             Some(pos) => {
-                let _ = self.inner.make_move(pos);
-                pos as u8
+                if self.inner.make_move(pos).is_ok() {
+                    pos as u8
+                } else {
+                    255 // internal error — move was not applied
+                }
             }
             None => 255,
         }
