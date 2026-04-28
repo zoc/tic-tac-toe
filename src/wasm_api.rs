@@ -79,9 +79,9 @@ impl WasmGame {
 
     /// Get winning positions as a 3-element array, or empty vec if no winner.
     /// Returns the 3 cell indices (0-8) that form the winning line.
-    pub fn get_winning_positions(&self) -> Vec<usize> {
+    pub fn get_winning_positions(&self) -> Vec<u32> {
         match self.inner.status() {
-            GameStatus::Won { positions, .. } => positions.to_vec(),
+            GameStatus::Won { positions, .. } => positions.iter().map(|&p| p as u32).collect(),
             _ => vec![],
         }
     }
