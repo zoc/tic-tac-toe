@@ -26,8 +26,10 @@ impl WasmGame {
     /// Set the AI difficulty level (0=Easy, 1=Medium, 2=Hard, 3=Unbeatable).
     /// Pure setter — does NOT reset the board (D-01).
     /// Persists across reset() calls (D-02).
+    /// Values above 3 are clamped to 3 (Unbeatable).
     pub fn set_difficulty(&mut self, level: u8) {
-        self.difficulty = level;
+        // Clamp to valid range 0-3; callers passing invalid values get the safest fallback
+        self.difficulty = level.min(3);
     }
 
     /// Attempt to place the current player's piece at position (0-8).
