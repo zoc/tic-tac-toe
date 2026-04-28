@@ -98,7 +98,7 @@ fn main() {
         } else {
             // Computer turn
             println!("  Computer is thinking...");
-            if let Some(mv) = get_computer_move(&game) {
+            if let Some(mv) = get_computer_move(&game, 1) { // D-07: hardcode Medium; no --difficulty flag
                 game.make_move(mv).unwrap();
                 println!("  Computer plays \x1b[1;31m{}\x1b[0m", mv + 1);
             }

@@ -1,11 +1,24 @@
 use crate::board::{Game, GameStatus, Player};
 use rand::RngExt;
 
-/// Probability that the AI makes a random move instead of the optimal one.
-const MISTAKE_RATE: f64 = 0.25;
+/// Maps a difficulty level (0–3) to an AI mistake probability.
+/// Higher level = fewer mistakes = harder to beat.
+/// Level 0 (Easy):        65% chance of a random move
+/// Level 1 (Medium):      25% chance of a random move  <- existing default
+/// Level 2 (Hard):         8% chance of a random move
+/// Level 3 (Unbeatable):   0% chance — pure minimax
+fn mistake_rate_for_level(level: u8) -> f64 {
+    match level {
+        0 => 0.65, // Easy      — frequently beatable
+        1 => 0.25, // Medium    — occasionally beatable (existing behavior)
+        2 => 0.08, // Hard      — rarely beatable
+        3 => 0.0,  // Unbeatable — perfect minimax; random_bool(0.0) always false (D-06)
+        _ => 0.25, // unknown level defaults to Medium (D-04 wildcard arm)
+    }
+}
 
 /// Returns the computer's chosen move (0-8), or None if the game is already over.
-pub fn get_computer_move(game: &Game) -> Option<usize> {
+pub fn get_computer_move(game: &Game, difficulty: u8) -> Option<usize> {
     // Return None if game is over
     if !matches!(game.status(), GameStatus::InProgress) {
         return None;
@@ -28,8 +41,8 @@ pub fn get_computer_move(game: &Game) -> Option<usize> {
 
     let mut rng = rand::rng();
 
-    // With MISTAKE_RATE probability, pick a random empty cell
-    if rng.random_bool(MISTAKE_RATE) {
+    // With mistake_rate_for_level(difficulty) probability, pick a random empty cell
+    if rng.random_bool(mistake_rate_for_level(difficulty)) {
         return Some(empty[rng.random_range(0..empty.len())]);
     }
 
@@ -159,7 +172,7 @@ mod tests {
         // Early game: only one move made
         let mut game = Game::new();
         game.make_move(0).unwrap(); // X plays, now O's turn
-        let mv = get_computer_move(&game);
+        let mv = get_computer_move(&game, 1);
         assert!(mv.is_some(), "AI should return a move");
         let pos = mv.unwrap();
         assert!(pos < 9, "Move should be in range 0-8");
@@ -170,7 +183,7 @@ mod tests {
         game.make_move(0).unwrap(); // X
         game.make_move(4).unwrap(); // O
         game.make_move(1).unwrap(); // X - now O's turn
-        let mv = get_computer_move(&game);
+        let mv = get_computer_move(&game, 1);
         assert!(mv.is_some());
         let pos = mv.unwrap();
         assert!(pos < 9);
@@ -189,7 +202,7 @@ mod tests {
             Some(Player::O),
         ];
         let game = Game::from_state(cells, Player::X);
-        let mv = get_computer_move(&game);
+        let mv = get_computer_move(&game, 1);
         assert!(mv.is_some());
         assert_eq!(mv.unwrap(), 7, "Only empty cell is position 7");
     }
@@ -204,7 +217,7 @@ mod tests {
         game.make_move(4).unwrap(); // O
         game.make_move(2).unwrap(); // X wins
         assert!(matches!(game.status(), GameStatus::Won { .. }));
-        assert_eq!(get_computer_move(&game), None);
+        assert_eq!(get_computer_move(&game, 1), None);
     }
 
     #[test]
@@ -234,7 +247,7 @@ mod tests {
                     game.make_move(pos).unwrap();
                 } else {
                     // AI plays
-                    let mv = get_computer_move(&game);
+                    let mv = get_computer_move(&game, 1);
                     assert!(mv.is_some(), "AI should return a move for in-progress game");
                     let pos = mv.unwrap();
                     assert!(pos < 9, "AI move out of range");
@@ -276,7 +289,7 @@ mod tests {
                     let pos = empty[rng.random_range(0..empty.len())];
                     game.make_move(pos).unwrap();
                 } else {
-                    let mv = get_computer_move(&game).unwrap();
+                    let mv = get_computer_move(&game, 1).unwrap();
                     game.make_move(mv).unwrap();
                 }
             }
@@ -319,7 +332,7 @@ mod tests {
                     let pos = empty[rng.random_range(0..empty.len())];
                     game.make_move(pos).unwrap();
                 } else {
-                    let mv = get_computer_move(&game);
+                    let mv = get_computer_move(&game, 1);
                     if let Some(pos) = mv {
                         assert!(pos < 9, "AI move out of range: {}", pos);
                         assert!(
@@ -334,6 +347,50 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_mistake_rate_for_level() {
+        assert_eq!(mistake_rate_for_level(0), 0.65);
+        assert_eq!(mistake_rate_for_level(1), 0.25);
+        assert_eq!(mistake_rate_for_level(2), 0.08);
+        assert_eq!(mistake_rate_for_level(3), 0.0);
+    }
+
+    #[test]
+    fn test_ai_unbeatable_never_loses() {
+        let mut rng = rand::rng();
+        for _ in 0..50 {
+            let mut game = Game::new();
+            loop {
+                match game.status() {
+                    GameStatus::Won { .. } | GameStatus::Draw => break,
+                    GameStatus::InProgress => {}
+                }
+                if game.current_player() == Player::X {
+                    // Human plays randomly
+                    let empty: Vec<usize> = game
+                        .cells()
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, c)| c.is_none())
+                        .map(|(i, _)| i)
+                        .collect();
+                    if empty.is_empty() {
+                        break;
+                    }
+                    game.make_move(empty[rng.random_range(0..empty.len())]).unwrap();
+                } else {
+                    let mv = get_computer_move(&game, 3).unwrap(); // Unbeatable (D-10)
+                    game.make_move(mv).unwrap();
+                }
+            }
+            // Unbeatable AI (O) must never lose — any X win is a test failure (D-10, Pitfall 3)
+            assert!(
+                !matches!(game.status(), GameStatus::Won { winner: Player::X, .. }),
+                "Unbeatable AI lost a game"
+            );
         }
     }
 }
