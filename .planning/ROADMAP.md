@@ -73,7 +73,10 @@ See archive: `.planning/milestones/v1.3-ROADMAP.md`
   3. Calling `game.set_difficulty(2)` produces AI that wins or draws nearly every game (Hard, ~8% mistake rate)
   4. Calling `game.set_difficulty(3)` produces AI that never loses — every game is a win or draw (Unbeatable, 0% mistake rate)
   5. `wasm-pack build` completes with no errors and all existing Rust tests pass
-**Plans**: TBD
+**Plans**: 1 plan
+
+Plans:
+- [ ] 13-01-PLAN.md — Parameterize AI, extend WASM API, update all call sites, verify build
 
 ### Phase 14: Difficulty UI & Persistence
 **Goal**: The player can pick a difficulty from a dropdown in the UI, the choice survives page refresh, and the dropdown stays disabled while the computer is thinking
@@ -92,5 +95,5 @@ See archive: `.planning/milestones/v1.3-ROADMAP.md`
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 13. Rust AI Parameterization & WASM API | 0/TBD | Not started | - |
+| 13. Rust AI Parameterization & WASM API | 0/1 | Not started | - |
 | 14. Difficulty UI & Persistence | 0/TBD | Not started | - |
