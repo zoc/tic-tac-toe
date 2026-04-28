@@ -64,5 +64,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-04-28
-Stopped at: Phase 13 complete, ready to plan Phase 14
-Resume file: None
+Stopped at: Phase 14 context gathered
+Resume file: .planning/phases/14-difficulty-ui-persistence/14-CONTEXT.md
