@@ -30,6 +30,26 @@ function saveScore() {
   }
 }
 
+// ─── Difficulty persistence helpers (localStorage) ────────────────────────────
+const DIFFICULTY_KEY = 'ttt-difficulty';
+
+function loadDifficulty() {
+  try {
+    const saved = localStorage.getItem(DIFFICULTY_KEY);
+    return saved !== null ? parseInt(saved, 10) : 1;  // default: 1 = Medium (UI-03)
+  } catch {
+    return 1;  // SecurityError in private browsing — fall back to Medium
+  }
+}
+
+function saveDifficulty(level) {
+  try {
+    localStorage.setItem(DIFFICULTY_KEY, String(level));
+  } catch {
+    // Storage quota exceeded or unavailable — silently ignore
+  }
+}
+
 // ─── In-memory score — loaded from localStorage, persists across refreshes ───
 const score = loadScore();
 
@@ -42,6 +62,7 @@ const scoreWinsEl  = document.getElementById('score-wins');
 const scoreLossEl  = document.getElementById('score-losses');
 const scoreDrawEl  = document.getElementById('score-draws');
 const winLineEl    = document.getElementById('win-line');
+const difficultyEl = document.getElementById('difficulty-select');
 
 // ─── Win line: lookup table of sorted positions → CSS class ──────────────────
 const WIN_LINE_CLASSES = {
@@ -210,6 +231,7 @@ async function handleCellClick(event) {
   // Set processing flag BEFORE delay to block any stray clicks (Decision C)
   isProcessing = true;
   boardEl.classList.add('board--disabled');
+  difficultyEl.disabled = true;
   setStatus("Computer's turn", 'computer-turn');  // UI-02
 
   // Artificial thinking delay (FEEL-01) — randomized 300–800ms pause
@@ -223,6 +245,7 @@ async function handleCellClick(event) {
   if (game.get_status() !== 'playing') {
     isProcessing = false;
     boardEl.classList.remove('board--disabled');
+    difficultyEl.disabled = false;
     return;
   }
 
@@ -232,6 +255,7 @@ async function handleCellClick(event) {
     // Should not happen (we already checked status === 'playing'), but be safe
     isProcessing = false;
     boardEl.classList.remove('board--disabled');
+    difficultyEl.disabled = false;
     setStatus('Your turn');  // restore correct status — prevents stale "Computer's turn" message
     return;
   }
@@ -239,6 +263,7 @@ async function handleCellClick(event) {
   sounds.computerMove();  // feedback for computer piece placement
   renderBoard();
   isProcessing = false;
+  difficultyEl.disabled = false;
 
   // Check if computer won or drew after its move
   if (game.get_status() !== 'playing') {
@@ -261,6 +286,7 @@ function resetGame() {
   }
   game.reset();
   isProcessing = false;
+  difficultyEl.disabled = false;
   boardEl.classList.remove('board--disabled');
   restartBtn.hidden = true;
   clearWinLine();
@@ -275,6 +301,11 @@ async function main() {
   await init();
 
   game = new WasmGame();
+
+  // Load persisted difficulty and apply to WASM engine (UI-02, UI-03)
+  const savedLevel = loadDifficulty();
+  game.set_difficulty(savedLevel);
+  difficultyEl.value = String(savedLevel);
 
   // Render empty board
   renderBoard();
@@ -294,6 +325,14 @@ async function main() {
 
   // Restart button (UI-04)
   restartBtn.addEventListener('click', resetGame);
+
+  // Difficulty selector (UI-01, UI-04) — change resets game unconditionally (D-05, D-06)
+  difficultyEl.addEventListener('change', () => {
+    const level = parseInt(difficultyEl.value, 10);
+    game.set_difficulty(level);   // update WASM engine BEFORE reset (D-07 ordering)
+    saveDifficulty(level);        // persist to localStorage
+    resetGame();                  // unconditional reset — always clears board (D-05, D-06)
+  });
 
   // Mute toggle button — persisted to localStorage via audio.js
   muteBtn.textContent = isMuted() ? '🔇' : '🔊';

@@ -238,6 +238,29 @@ html, body {
   outline-offset: 2px;
 }
 
+/* ─── Difficulty selector (Phase 14) ─── */
+.difficulty-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.difficulty-select {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--text-dim);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: inherit;
+  cursor: default;
+}
+
+.difficulty-select:disabled {
+  cursor: not-allowed;
+}
+
 /* ─── Utility: visually hidden (keep for accessibility) ─── */
 [hidden] { display: none !important; }
 

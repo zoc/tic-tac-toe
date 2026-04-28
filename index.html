@@ -11,6 +11,13 @@
     <div class="title-row">
       <h1 class="title">Tic-Tac-Toe</h1>
       <button class="mute-btn" id="mute-btn" aria-label="Toggle sound" aria-pressed="false">🔊</button>
+      <span class="difficulty-label">Difficulty:</span>
+      <select class="difficulty-select" id="difficulty-select" aria-label="Select difficulty">
+        <option value="0">Easy</option>
+        <option value="1" selected>Medium</option>
+        <option value="2">Hard</option>
+        <option value="3">Unbeatable</option>
+      </select>
     </div>
 
     <!-- Score board (SCORE-01) — in-memory, resets on page refresh -->
