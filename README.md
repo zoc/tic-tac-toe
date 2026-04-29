@@ -1,10 +1,10 @@
 # Tic-Tac-Toe WASM
 
-A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished frontend featuring smooth CSS animations, synthesized sound effects, system dark mode, score persistence, and an animated win line. The computer is beatable — it plays well but makes occasional mistakes.
+A browser-based tic-tac-toe game where a human player (X) plays against a computer opponent. The game logic is written in Rust and compiled to WebAssembly, with a polished frontend featuring smooth CSS animations, synthesized sound effects, system dark mode, score persistence, an animated win line, and selectable difficulty levels. The computer difficulty ranges from Easy (frequently beatable) to Unbeatable (perfect minimax play).
 
 ## About This Project
 
-This project was created to test the [**get-shit-done**](https://github.com/gsd-build/get-shit-done) framework for AI-assisted software development. **Every single line of code, configuration, and documentation was written by AI** — no human coding involved. The entire development process, from initial setup through three milestone releases (v1.0 MVP, v1.1 Polish, v1.2 Docker, v1.3 CI/CD), was orchestrated using GSD's structured phase-based workflow with autonomous planning, execution, and verification.
+This project was created to test the [**get-shit-done**](https://github.com/gsd-build/get-shit-done) framework for AI-assisted software development. **Every single line of code, configuration, and documentation was written by AI** — no human coding involved. The entire development process, from initial setup through four milestone releases (v1.0 MVP, v1.1 Polish, v1.2 Docker, v1.3 CI/CD, v1.4 Difficulty Levels), was orchestrated using GSD's structured phase-based workflow with autonomous planning, execution, and verification.
 
 ## Quick Start
 
@@ -34,7 +34,7 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser.
 docker run --rm -p 8080:80 fzoc/tic-tac-toe:latest
 
 # Specific version
-docker run --rm -p 8080:80 fzoc/tic-tac-toe:1.3.0
+docker run --rm -p 8080:80 fzoc/tic-tac-toe:1.4.0
 ```
 
 The image is a multi-arch manifest (`linux/amd64` + `linux/arm64`) — Docker will pull the correct variant for your machine automatically.
@@ -104,8 +104,8 @@ The repository maintainer must configure two GitHub settings:
 
 1. **Tag the release:**
    ```bash
-   git tag v1.3.0
-   git push origin v1.3.0
+   git tag v1.4.0
+   git push origin v1.4.0
    ```
 
 2. **Monitor the build:**
@@ -115,13 +115,13 @@ The repository maintainer must configure two GitHub settings:
 
 3. **Verify on Docker Hub:**
    - Visit https://hub.docker.com/r/fzoc/tic-tac-toe
-   - Tags `1.3.0`, `1.3`, `1`, and `latest` all appear
+   - Tags `1.4.0`, `1.4`, `1`, and `latest` all appear
    - Both `linux/amd64` and `linux/arm64` architectures shown
 
 ### Workflow details
 
 **Workflow file:** `.github/workflows/docker.yml`
-**Trigger:** Git tags matching `v*.*.*` (e.g., v1.2.0, v1.3.0)
+**Trigger:** Git tags matching `v*.*.*` (e.g., v1.3.0, v1.4.0)
 **Platforms:** linux/amd64, linux/arm64 (multi-arch manifest created automatically)
 **Cache:** GitHub Actions cache (speeds up subsequent builds)
 **Build time:** ~5-8 minutes with warm cache
@@ -182,4 +182,4 @@ npm run build
 - **Vanilla JS + CSS** — rendering and UI (~762 LOC, no framework)
 - **nginx:alpine** — serves the static production build in Docker
 
-The AI uses minimax with ~25% random mistake injection — tunable in `src/ai.rs`.
+The AI uses minimax with configurable difficulty: Easy (65% mistake rate), Medium (25%), Hard (8%), and Unbeatable (perfect play, 0% mistakes). Difficulty is selected in the UI and persisted via `localStorage`.

@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-28 — v1.4 complete)
 Phase: 14 of 14 (Difficulty UI & Persistence)
 Plan: 01 of 01 — Complete
 Status: Milestone complete
-Last activity: 2026-04-28 -- Phase 14 complete
+Last activity: 2026-04-29 - Completed quick task 260429-001: Update the main readme to include what has changed in v1.4.0
 
 Progress: [██████████] 100%
 
@@ -61,8 +61,14 @@ None.
 
 None.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260429-001 | Update the main readme to include what has changed in v1.4.0 | 2026-04-29 | — | [260429-001-update-readme-v140](./quick/260429-001-update-readme-v140/) |
+
 ## Session Continuity
 
-Last session: 2026-04-28
-Stopped at: Phase 14 complete — v1.4 milestone done
+Last session: 2026-04-29
+Stopped at: Quick task 260429-001 complete — README updated for v1.4.0
 Resume file: none
