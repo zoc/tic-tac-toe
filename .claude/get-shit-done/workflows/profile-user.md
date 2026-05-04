@@ -353,7 +353,7 @@ Generate selected artifacts sequentially (file I/O is fast, no benefit from para
 gsd-sdk query generate-dev-preferences --analysis "$ANALYSIS_PATH" --json
 ```
 
-Display: "✓ Generated /gsd-dev-preferences at /Users/franck/Development/GITHUB/tic-tac-toe/.claude/commands/gsd/dev-preferences.md"
+Display: "✓ Generated /gsd-dev-preferences at /Users/franck/Development/GITHUB/tic-tac-toe/.claude/skills/gsd-dev-preferences/SKILL.md"
 
 **For CLAUDE.md profile section (if selected):**
 
@@ -412,7 +412,7 @@ Your profile:    /Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-d
 Then list paths for each generated artifact:
 ```
 Artifacts:
-  ✓ /gsd-dev-preferences   /Users/franck/Development/GITHUB/tic-tac-toe/.claude/commands/gsd/dev-preferences.md
+  ✓ /gsd-dev-preferences   /Users/franck/Development/GITHUB/tic-tac-toe/.claude/skills/gsd-dev-preferences/SKILL.md
   ✓ CLAUDE.md section       ./CLAUDE.md
   ✓ Global CLAUDE.md        /Users/franck/Development/GITHUB/tic-tac-toe/.claude/CLAUDE.md
 ```
