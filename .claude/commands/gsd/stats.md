@@ -14,5 +14,5 @@ Display comprehensive project statistics including phase progress, plan executio
 </execution_context>
 
 <process>
-Execute the stats workflow from @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/stats.md end-to-end.
+Execute end-to-end.
 </process>
