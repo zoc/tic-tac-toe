@@ -1,6 +1,6 @@
 <purpose>
 Capture a forward-looking idea as a structured seed file with trigger conditions.
-Seeds auto-surface during /gsd:new-milestone when trigger conditions match the
+Seeds auto-surface during /gsd-new-milestone when trigger conditions match the
 new milestone's scope.
 
 Seeds beat deferred items because they:
@@ -82,17 +82,17 @@ scope: unknown
 
 ## Why This Matters
 
-_To be filled in. Run `/gsd:capture --seed --enrich SEED-{PADDED}` to add context._
+_To be filled in. Run `/gsd-capture --seed --enrich SEED-{PADDED}` to add context._
 
 ## When to Surface
 
 **Trigger:** when relevant
 
-This seed will surface during `/gsd:new-milestone` when the milestone scope matches.
+This seed will surface during `/gsd-new-milestone` when the milestone scope matches.
 
 ## Scope Estimate
 
-**Unknown** — run `/gsd:capture --seed --enrich SEED-{PADDED}` to estimate effort.
+**Unknown** — run `/gsd-capture --seed --enrich SEED-{PADDED}` to estimate effort.
 
 ## Breadcrumbs
 
@@ -135,7 +135,8 @@ Store relevant file paths as `$BREADCRUMBS`.
 
 <step name="commit-seed">
 ```bash
-gsd-sdk query commit "docs: plant seed — {$IDEA}" --files .planning/seeds/SEED-{PADDED}-{slug}.md
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+gsd_run query commit "docs: plant seed — {$IDEA}" --files .planning/seeds/SEED-{PADDED}-{slug}.md
 ```
 </step>
 
@@ -146,10 +147,10 @@ gsd-sdk query commit "docs: plant seed — {$IDEA}" --files .planning/seeds/SEED
 "{$IDEA}"
 File: .planning/seeds/SEED-{PADDED}-{slug}.md
 
-Trigger and scope are set to defaults. Run `/gsd:capture --seed --enrich SEED-{PADDED}`
+Trigger and scope are set to defaults. Run `/gsd-capture --seed --enrich SEED-{PADDED}`
 to add trigger conditions, rationale, and scope estimate at your convenience.
 
-This seed will surface automatically when you run /gsd:new-milestone.
+This seed will surface automatically when you run /gsd-new-milestone.
 ```
 </step>
 
@@ -206,7 +207,7 @@ Update the seed file's frontmatter and sections with the gathered values:
 
 Commit the update:
 ```bash
-gsd-sdk query commit "docs: enrich seed ${SEED_ID} — trigger + why + scope" --files "$SEED_FILE"
+gsd_run query commit "docs: enrich seed ${SEED_ID} — trigger + why + scope" --files "$SEED_FILE"
 ```
 
 Confirm:

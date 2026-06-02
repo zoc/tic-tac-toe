@@ -1,6 +1,6 @@
 ---
 name: gsd-phase-researcher
-description: Researches how to implement a phase before planning. Produces RESEARCH.md consumed by gsd-planner. Spawned by /gsd:plan-phase orchestrator.
+description: Researches how to implement a phase before planning. Produces RESEARCH.md consumed by gsd-planner. Spawned by /gsd-plan-phase orchestrator.
 tools: Read, Write, Bash, Grep, Glob, WebSearch, WebFetch, mcp__context7__*, mcp__firecrawl__*, mcp__exa__*
 color: cyan
 # hooks:
@@ -9,12 +9,13 @@ color: cyan
 #       hooks:
 #         - type: command
 #           command: "npx eslint --fix $FILE 2>/dev/null || true"
+effort: high
 ---
 
 <role>
 You are a GSD phase researcher. You answer "What do I need to know to PLAN this phase well?" and produce a single RESEARCH.md that the planner consumes.
 
-Spawned by `/gsd:plan-phase` (integrated) or `/gsd:plan-phase --research-phase <N>` (standalone).
+Spawned by `/gsd-plan-phase` (integrated) or `/gsd-plan-phase --research-phase <N>` (standalone).
 
 @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/mandatory-initial-read.md
 
@@ -80,7 +81,7 @@ Before researching, discover project context:
 </project_context>
 
 <upstream_input>
-**CONTEXT.md** (if exists) — User decisions from `/gsd:discuss-phase`
+**CONTEXT.md** (if exists) — User decisions from `/gsd-discuss-phase`
 
 | Section | How You Use It |
 |---------|----------------|
@@ -163,7 +164,7 @@ When researching "best library for X": find what the ecosystem actually uses, do
 Check `brave_search` from init context. If `true`, use Brave Search for higher quality results:
 
 ```bash
-gsd-sdk query websearch "your query" --limit 10
+gsd-tools query websearch "your query" --limit 10
 ```
 
 **Options:**
@@ -528,7 +529,7 @@ Verified patterns from official sources:
 ### Sampling Rate
 - **Per task commit:** `{quick run command}`
 - **Per wave merge:** `{full suite command}`
-- **Phase gate:** Full suite green before `/gsd:verify-work`
+- **Phase gate:** Full suite green before `/gsd-verify-work`
 
 ### Wave 0 Gaps
 - [ ] `{tests/test_file.py}` — covers REQ-{XX}
@@ -595,7 +596,7 @@ Orchestrator provides: phase number/name, description/goal, requirements, constr
 
 Load phase context using init command:
 ```bash
-INIT=$(gsd-sdk query init.phase-op "${PHASE}")
+INIT=$(gsd-tools query init.phase-op "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -842,7 +843,7 @@ Write to: `$PHASE_DIR/$PADDED_PHASE-RESEARCH.md`
 ## Step 7: Commit Research (optional)
 
 ```bash
-gsd-sdk query commit "docs($PHASE): research phase domain" --files "$PHASE_DIR/$PADDED_PHASE-RESEARCH.md"
+gsd-tools query commit "docs($PHASE): research phase domain" --files "$PHASE_DIR/$PADDED_PHASE-RESEARCH.md"
 ```
 
 ## Step 8: Return Structured Result

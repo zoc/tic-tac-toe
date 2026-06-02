@@ -13,7 +13,8 @@ Read all files referenced by the invoking prompt's execution_context before star
 **MANDATORY FIRST STEP — Execute init command:**
 
 ```bash
-INIT=$(gsd-sdk query init.new-workspace)
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+INIT=$(gsd_run query init.new-workspace)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -73,7 +74,7 @@ Error:
 No git repos found in the current directory and this is not a git repo.
 
 Run this command from a directory containing git repos, or specify repos explicitly:
-  /gsd:workspace --new --name my-workspace --repos /path/to/repo1,/path/to/repo2
+  /gsd-workspace --new --name my-workspace --repos /path/to/repo1,/path/to/repo2
 ```
 Exit.
 
@@ -84,7 +85,7 @@ Error:
 Error: --auto requires --repos to specify which repos to include.
 
 Usage:
-  /gsd:workspace --new --name my-workspace --repos repo1,repo2 --auto
+  /gsd-workspace --new --name my-workspace --repos repo1,repo2 --auto
 ```
 Exit.
 
@@ -203,7 +204,7 @@ Workspace created: $TARGET_PATH
 
 Next steps:
   cd "$TARGET_PATH"
-  /gsd:new-project    # Initialize GSD in the workspace
+  /gsd-new-project    # Initialize GSD in the workspace
 ```
 
 **If some repos failed:**
@@ -216,7 +217,7 @@ Workspace created with $SUCCESS_COUNT of $TOTAL_COUNT repos: $TARGET_PATH
 
 Next steps:
   cd "$TARGET_PATH"
-  /gsd:new-project    # Initialize GSD in the workspace
+  /gsd-new-project    # Initialize GSD in the workspace
 ```
 
 **Offer to initialize GSD (if not `--auto`):**
@@ -225,7 +226,7 @@ Use AskUserQuestion:
 - header: "Initialize GSD"
 - question: "Would you like to initialize a GSD project in the new workspace?"
 - options:
-  - "Yes — run /gsd:new-project" → tell user to `cd "$TARGET_PATH"` first, then run `/gsd:new-project`
+  - "Yes — run /gsd-new-project" → tell user to `cd "$TARGET_PATH"` first, then run `/gsd-new-project`
   - "No — I'll set it up later" → done
 
 </process>

@@ -1,8 +1,7 @@
 'use strict';
 
 /**
- * GENERATED FILE — state.*, verify.*, init.*, phase.*, phases.*, validate.*, roadmap.*, and non-family alias/subcommand metadata for CJS routing.
- * Source: sdk/src/query/command-manifest.{state,verify,init,phase,phases,validate,roadmap,non-family}.ts
+ * state.*, verify.*, init.*, phase.*, phases.*, validate.*, roadmap.*, and non-family alias/subcommand metadata for CJS routing.
  */
 
 const STATE_COMMAND_ALIASES = [
@@ -382,19 +381,11 @@ const INIT_COMMAND_ALIASES = [
 
 const PHASE_COMMAND_ALIASES = [
   {
-    "canonical": "phase.list-plans",
+    "canonical": "phase.uat-passed",
     "aliases": [
-      "phase list-plans"
+      "phase uat-passed"
     ],
-    "subcommand": "list-plans",
-    "mutation": false
-  },
-  {
-    "canonical": "phase.list-artifacts",
-    "aliases": [
-      "phase list-artifacts"
-    ],
-    "subcommand": "list-artifacts",
+    "subcommand": "uat-passed",
     "mutation": false
   },
   {
@@ -649,20 +640,6 @@ const NON_FAMILY_COMMAND_ALIASES = [
   {
     "canonical": "generate-dev-preferences",
     "aliases": [],
-    "mutation": true
-  },
-  {
-    "canonical": "intel.patch-meta",
-    "aliases": [
-      "intel patch-meta"
-    ],
-    "mutation": true
-  },
-  {
-    "canonical": "intel.snapshot",
-    "aliases": [
-      "intel snapshot"
-    ],
     "mutation": true
   },
   {

@@ -16,23 +16,24 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 ## 0. Initialize Milestone Context
 
 ```bash
-INIT=$(gsd-sdk query init.milestone-op)
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+INIT=$(gsd_run query init.milestone-op)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_CHECKER=$(gsd-sdk query agent-skills gsd-integration-checker)
+AGENT_SKILLS_CHECKER=$(gsd_run query agent-skills gsd-integration-checker)
 ```
 
 Extract from init JSON: `milestone_version`, `milestone_name`, `phase_count`, `completed_phases`, `commit_docs`.
 
 Resolve integration checker model:
 ```bash
-integration_checker_model=$(gsd-sdk query resolve-model gsd-integration-checker --raw)
+integration_checker_model=$(gsd_run query resolve-model gsd-integration-checker --raw)
 ```
 
 ## 1. Determine Milestone Scope
 
 ```bash
 # Get phases in milestone (sorted numerically, handles decimals)
-gsd-sdk query phases.list
+gsd_run query phases.list
 ```
 
 - Parse version from arguments or detect current from ROADMAP.md
@@ -46,7 +47,7 @@ For each phase directory, read the VERIFICATION.md:
 
 ```bash
 # For each phase, use find-phase to resolve the directory (handles archived phases)
-PHASE_INFO=$(gsd-sdk query find-phase 01 --raw)
+PHASE_INFO=$(gsd_run query find-phase 01 --raw)
 # Extract directory from JSON, then read VERIFICATION.md from that directory
 # Repeat for each phase number from ROADMAP.md
 ```
@@ -115,7 +116,7 @@ For each phase's SUMMARY.md, extract `requirements-completed` from YAML frontmat
 ```bash
 for summary in .planning/phases/*-*/*-SUMMARY.md; do
   [ -e "$summary" ] || continue
-  gsd-sdk query summary-extract "$summary" --fields requirements_completed --pick requirements_completed
+  gsd_run query summary-extract "$summary" --fields requirements_completed --pick requirements_completed
 done
 ```
 
@@ -143,7 +144,7 @@ For each REQ-ID, determine status using all three sources:
 Skip if `workflow.nyquist_validation` is explicitly `false` (absent = enabled).
 
 ```bash
-NYQUIST_CONFIG=$(gsd-sdk query config-get workflow.nyquist_validation --raw 2>/dev/null)
+NYQUIST_CONFIG=$(gsd_run query config-get workflow.nyquist_validation --raw --default true 2>/dev/null)
 ```
 
 If `false`: skip entirely.
@@ -160,7 +161,7 @@ Classify per phase:
 
 Add to audit YAML: `nyquist: { compliant_phases, partial_phases, missing_phases, overall }`
 
-Discovery only — never auto-calls `/gsd:validate-phase`.
+Discovery only — never auto-calls `/gsd-validate-phase`.
 
 ## 6. Aggregate into v{version}-MILESTONE-AUDIT.md
 
@@ -233,7 +234,7 @@ All requirements covered. Cross-phase integration verified. E2E flows complete.
 
 /clear then:
 
-/gsd:complete-milestone {version}
+/gsd-complete-milestone {version}
 
 ───────────────────────────────────────────────────────────────
 
@@ -266,9 +267,9 @@ All requirements covered. Cross-phase integration verified. E2E flows complete.
 
 | Phase | VALIDATION.md | Compliant | Action |
 |-------|---------------|-----------|--------|
-| {phase} | exists/missing | true/false/partial | `/gsd:validate-phase {N}` |
+| {phase} | exists/missing | true/false/partial | `/gsd-validate-phase {N}` |
 
-Phases needing validation: run `/gsd:validate-phase {N}` for each flagged phase.
+Phases needing validation: run `/gsd-validate-phase {N}` for each flagged phase.
 
 ───────────────────────────────────────────────────────────────
 
@@ -281,13 +282,13 @@ per group of related gaps) using the standard phase chain:
 
 /clear then:
 
-/gsd:phase --insert <N> "Close gap: <REQ-ID> — <description>"
-/gsd:discuss-phase <N>
-/gsd:plan-phase <N>
-/gsd:execute-phase <N>
+/gsd-phase --insert <N> "Close gap: <REQ-ID> — <description>"
+/gsd-discuss-phase <N>
+/gsd-plan-phase <N>
+/gsd-execute-phase <N>
 
 For Nyquist-coverage gaps flagged in the table above, prefer running
-`/gsd:validate-phase <N>` for each flagged phase (and `/gsd:secure-phase
+`/gsd-validate-phase <N>` for each flagged phase (and `/gsd-secure-phase
 <N>` if SECURITY.md was flagged) before inserting a new closure phase —
 they may close the gap retroactively without a new phase.
 
@@ -295,7 +296,7 @@ they may close the gap retroactively without a new phase.
 
 **Also available:**
 - cat .planning/v{version}-MILESTONE-AUDIT.md — see full report
-- /gsd:complete-milestone {version} — proceed anyway (accept tech debt)
+- /gsd-complete-milestone {version} — proceed anyway (accept tech debt)
 
 ───────────────────────────────────────────────────────────────
 
@@ -325,17 +326,17 @@ All requirements met. No critical blockers. Accumulated tech debt needs review.
 
 **A. Complete milestone** — accept debt, track in backlog
 
-/gsd:complete-milestone {version}
+/gsd-complete-milestone {version}
 
 **B. Plan a cleanup phase** — address the debt above before completing.
 Insert a closure phase using the standard chain:
 
 /clear then:
 
-/gsd:phase --insert <N> "Address tech debt: <area>"
-/gsd:discuss-phase <N>
-/gsd:plan-phase <N>
-/gsd:execute-phase <N>
+/gsd-phase --insert <N> "Address tech debt: <area>"
+/gsd-discuss-phase <N>
+/gsd-plan-phase <N>
+/gsd-execute-phase <N>
 
 ───────────────────────────────────────────────────────────────
 </offer_next>

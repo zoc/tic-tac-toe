@@ -84,8 +84,8 @@ When the conversation reaches natural conclusions or the developer signals readi
 | Research question | `.planning/research/questions.md` (append) | Open questions that need deeper investigation |
 | Requirement | `REQUIREMENTS.md` (append) | Clear requirements that emerged from discussion |
 | New phase | `ROADMAP.md` (append) | Scope large enough to warrant its own phase |
-| Spike | `/gsd:spike` (invoke) | Feasibility uncertainty surfaced — "will this API work?", "can we do X?" |
-| Sketch | `/gsd:sketch` (invoke) | Design direction unclear — "what should this look like?", "how should this feel?" |
+| Spike | `/gsd-spike` (invoke) | Feasibility uncertainty surfaced — "will this API work?", "can we do X?" |
+| Sketch | `/gsd-sketch` (invoke) | Design direction unclear — "what should this look like?", "how should this feel?" |
 
 Present suggestions:
 ```
@@ -115,7 +115,8 @@ For each selected output, write the file:
 
 Commit if `commit_docs` is enabled:
 ```bash
-gsd-sdk query commit "docs: capture exploration — {topic_slug}" --files {file_list}
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+gsd_run query commit "docs: capture exploration — {topic_slug}" --files {file_list}
 ```
 
 ## Step 6: Close
@@ -127,7 +128,7 @@ gsd-sdk query commit "docs: capture exploration — {topic_slug}" --files {file_
 **Outputs:** {count} artifact(s) created
 {list of created files}
 
-Continue exploring with `/gsd:explore` or start working with `/gsd:progress --next`.
+Continue exploring with `/gsd-explore` or start working with `/gsd-progress --next`.
 ```
 
 </process>

@@ -17,8 +17,9 @@ Read all files referenced by the invoking prompt's execution_context before star
 Parse arguments and load project state:
 
 ```bash
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
 PHASE_ARG="${1}"
-INIT=$(gsd-sdk query init.phase-op "${PHASE_ARG}")
+INIT=$(gsd_run query init.phase-op "${PHASE_ARG}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -36,7 +37,7 @@ fi
 **Phase validation (before config gate):**
 If `phase_found` is false, report error and exit:
 ```
-Error: Phase ${PHASE_ARG} not found. Run /gsd:progress to see available phases.
+Error: Phase ${PHASE_ARG} not found. Run /gsd-progress to see available phases.
 ```
 
 This runs BEFORE config gate check so user errors are surfaced immediately regardless of config state.
@@ -74,7 +75,7 @@ FIX_REPORT_PATH="${PHASE_DIR}/${PADDED_PHASE}-REVIEW-FIX.md"
 Check if code review is enabled via config:
 
 ```bash
-CODE_REVIEW_ENABLED=$(gsd-sdk query config-get workflow.code_review 2>/dev/null || echo "true")
+CODE_REVIEW_ENABLED=$(gsd_run query config-get workflow.code_review 2>/dev/null || echo "true")
 ```
 
 If CODE_REVIEW_ENABLED is "false":
@@ -93,7 +94,7 @@ Verify that REVIEW.md exists:
 
 ```bash
 if [ ! -f "${REVIEW_PATH}" ]; then
-  echo "Error: No REVIEW.md found for Phase ${PHASE_ARG}. Run /gsd:code-review ${PHASE_ARG} first."
+  echo "Error: No REVIEW.md found for Phase ${PHASE_ARG}. Run /gsd-code-review ${PHASE_ARG} first."
   exit 1
 fi
 ```
@@ -223,7 +224,7 @@ Check if FIX_REPORT_PATH exists:
 Either way:
 ```
 Some fix commits may already exist in git history — check git log for fix(${PADDED_PHASE}) commits.
-You can retry with /gsd:code-review ${PHASE_ARG} --fix.
+You can retry with /gsd-code-review ${PHASE_ARG} --fix.
 ```
 
 Exit workflow (skip auto loop).
@@ -363,7 +364,7 @@ if [ -f "${FIX_REPORT_PATH}" ]; then
     echo "REVIEW-FIX.md created at ${FIX_REPORT_PATH}"
     
     if [ "$COMMIT_DOCS" = "true" ]; then
-      gsd-sdk query commit \
+      gsd_run query commit \
         "docs(${PADDED_PHASE}): add code review fix report" \
         --files "${FIX_REPORT_PATH}"
     fi
@@ -398,7 +399,7 @@ if [ ! -f "${FIX_REPORT_PATH}" ]; then
   echo "The fixer agent may have failed before completing."
   echo "Check git log for any fix(${PADDED_PHASE}) commits."
   echo ""
-  echo "Retry: /gsd:code-review ${PHASE_ARG} --fix"
+  echo "Retry: /gsd-code-review ${PHASE_ARG} --fix"
   echo ""
   echo "═══════════════════════════════════════════════════════════════"
   exit 1
@@ -455,7 +456,7 @@ if [ "$FIX_STATUS" = "all_fixed" ]; then
   echo "Full report: ${FIX_REPORT_PATH}"
   echo ""
   echo "Next step:"
-  echo "  /gsd:verify-work  — Verify phase completion"
+  echo "  /gsd-verify-work  — Verify phase completion"
   echo ""
 fi
 ```
@@ -469,8 +470,8 @@ if [ "$FIX_STATUS" = "partial" ] || [ "$FIX_STATUS" = "none_fixed" ]; then
   echo ""
   echo "Next steps:"
   echo "  cat ${FIX_REPORT_PATH}                     — View fix report"
-  echo "  /gsd:code-review ${PHASE_NUMBER}           — Re-review code"
-  echo "  /gsd:verify-work                           — Verify phase completion"
+  echo "  /gsd-code-review ${PHASE_NUMBER}           — Re-review code"
+  echo "  /gsd-verify-work                           — Verify phase completion"
   echo ""
 fi
 ```

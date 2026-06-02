@@ -2,7 +2,7 @@
 Package spike experiment findings into a persistent project skill — an implementation blueprint
 for future build conversations. Reads from `.planning/spikes/`, writes skill to
 `./.claude/skills/spike-findings-[project]/` (project-local) and summary to
-`.planning/spikes/WRAP-UP-SUMMARY.md`. Companion to `/gsd:spike`.
+`.planning/spikes/WRAP-UP-SUMMARY.md`. Companion to `/gsd-spike`.
 </purpose>
 
 <required_reading>
@@ -31,13 +31,14 @@ Read all files referenced by the invoking prompt's execution_context before star
 If no unprocessed spikes exist:
 ```
 No unprocessed spikes found in `.planning/spikes/`.
-Run `/gsd:spike` first to create experiments.
+Run `/gsd-spike` first to create experiments.
 ```
 Exit.
 
 Check `commit_docs` config:
 ```bash
-COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+COMMIT_DOCS=$(gsd_run query config-get commit_docs 2>/dev/null || echo "true")
 ```
 </step>
 
@@ -246,7 +247,7 @@ Patterns and stack choices established across spike sessions. New spikes follow 
 Commit all artifacts (if `COMMIT_DOCS` is true):
 
 ```bash
-gsd-sdk query commit "docs(spike-wrap-up): package [N] spike findings into project skill" --files .planning/spikes/WRAP-UP-SUMMARY.md .planning/spikes/CONVENTIONS.md
+gsd_run query commit "docs(spike-wrap-up): package [N] spike findings into project skill" --files .planning/spikes/WRAP-UP-SUMMARY.md .planning/spikes/CONVENTIONS.md
 ```
 </step>
 
@@ -278,14 +279,14 @@ After the summary, present next-step options:
 
 **Explore frontier spikes** — see what else is worth spiking based on what we've learned
 
-`/gsd:spike` (run with no argument — its frontier mode analyzes the spike landscape and proposes integration and frontier spikes)
+`/gsd-spike` (run with no argument — its frontier mode analyzes the spike landscape and proposes integration and frontier spikes)
 
 ───────────────────────────────────────────────────────────────
 
 **Also available:**
-- `/gsd:plan-phase` — start planning the real implementation
-- `/gsd:spike [idea]` — spike a specific new idea
-- `/gsd:explore` — continue exploring
+- `/gsd-plan-phase` — start planning the real implementation
+- `/gsd-spike [idea]` — spike a specific new idea
+- `/gsd-explore` — continue exploring
 - Other
 
 ───────────────────────────────────────────────────────────────
@@ -302,5 +303,5 @@ After the summary, present next-step options:
 - [ ] `.planning/spikes/WRAP-UP-SUMMARY.md` written for project history
 - [ ] Project CLAUDE.md has auto-load routing line
 - [ ] Summary presented
-- [ ] Next-step options presented (including frontier spike exploration via `/gsd:spike`)
+- [ ] Next-step options presented (including frontier spike exploration via `/gsd-spike`)
 </success_criteria>

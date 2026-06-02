@@ -164,7 +164,7 @@ This document evolves at phase transitions and milestone boundaries.
 4. Decisions to log? → Add to Key Decisions
 5. "What This Is" still accurate? → Update if drifted
 
-**After each milestone** (via `/gsd:complete-milestone`):
+**After each milestone** (via `/gsd-complete-milestone`):
 1. Full review of all sections
 2. Core Value check — still the right priority?
 3. Audit Out of Scope — reasons still valid?
@@ -181,7 +181,8 @@ blockers, todos) is preserved across the switch — symmetric with
 `milestone.complete`.
 
 ```bash
-gsd-sdk query state.milestone-switch --milestone "v[X.Y]" --name "[Name]"
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+gsd_run query state.milestone-switch --milestone "v[X.Y]" --name "[Name]"
 ```
 
 The resulting Current Position section looks like:
@@ -208,21 +209,21 @@ Delete MILESTONE-CONTEXT.md if exists (consumed).
 Clear leftover phase directories from the previous milestone:
 
 ```bash
-gsd-sdk query phases.clear --confirm
+gsd_run query phases.clear --confirm
 ```
 
 ```bash
-gsd-sdk query commit "docs: start milestone v[X.Y] [Name]" --files .planning/PROJECT.md .planning/STATE.md
+gsd_run query commit "docs: start milestone v[X.Y] [Name]" --files .planning/PROJECT.md .planning/STATE.md
 ```
 
 ## 7. Load Context and Resolve Models
 
 ```bash
-INIT=$(gsd-sdk query init.new-milestone)
+INIT=$(gsd_run query init.new-milestone)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_RESEARCHER=$(gsd-sdk query agent-skills gsd-project-researcher)
-AGENT_SKILLS_SYNTHESIZER=$(gsd-sdk query agent-skills gsd-research-synthesizer)
-AGENT_SKILLS_ROADMAPPER=$(gsd-sdk query agent-skills gsd-roadmapper)
+AGENT_SKILLS_RESEARCHER=$(gsd_run query agent-skills gsd-project-researcher)
+AGENT_SKILLS_SYNTHESIZER=$(gsd_run query agent-skills gsd-research-synthesizer)
+AGENT_SKILLS_ROADMAPPER=$(gsd_run query agent-skills gsd-roadmapper)
 ```
 
 Extract from init JSON: `researcher_model`, `synthesizer_model`, `roadmapper_model`, `commit_docs`, `research_enabled`, `current_milestone`, `project_exists`, `roadmap_exists`, `latest_completed_milestone`, `phase_dir_count`, `phase_archive_path`, `agents_installed`, `missing_agents`.
@@ -235,7 +236,7 @@ Extract from init JSON: `researcher_model`, `synthesizer_model`, `roadmapper_mod
 Subagent spawns (gsd-project-researcher, gsd-research-synthesizer, gsd-roadmapper) will fail
 with "agent type not found". Run the installer with --global to make agents available:
 
-  npx get-shit-done-cc@latest --global
+  npx @opengsd/gsd-core@latest --global
 
 Proceeding without research subagents — roadmap will be generated inline.
 ```
@@ -259,7 +260,7 @@ Then verify `.planning/phases/` no longer contains old milestone directories bef
 
 If `phase_dir_count > 0` but `phase_archive_path` is missing:
 - Stop and explain that reset numbering is unsafe without a completed milestone archive target.
-- Tell the user to complete/archive the previous milestone first, then rerun `/gsd:new-milestone --reset-phase-numbers ${GSD_WS}`.
+- Tell the user to complete/archive the previous milestone first, then rerun `/gsd-new-milestone --reset-phase-numbers ${GSD_WS}`.
 
 ## 8. Research Decision
 
@@ -277,7 +278,7 @@ AskUserQuestion: "Research the domain ecosystem for new features before defining
 - "Skip research (current default)" — Go straight to requirements
 - "Research first" — Discover patterns, features, architecture for NEW capabilities
 
-**IMPORTANT:** Do NOT persist this choice to config.json. The `workflow.research` setting is a persistent user preference that controls plan-phase behavior across the project. Changing it here would silently alter future `/gsd:plan-phase` behavior. To change the default, use `/gsd:settings`.
+**IMPORTANT:** Do NOT persist this choice to config.json. The `workflow.research` setting is a persistent user preference that controls plan-phase behavior across the project. Changing it here would silently alter future `/gsd-plan-phase` behavior. To change the default, use `/gsd-settings`.
 
 **If user chose "Research first":**
 
@@ -444,7 +445,7 @@ If "adjust": Return to scoping.
 
 **Commit requirements:**
 ```bash
-gsd-sdk query commit "docs: define milestone v[X.Y] requirements" --files .planning/REQUIREMENTS.md
+gsd_run query commit "docs: define milestone v[X.Y] requirements" --files .planning/REQUIREMENTS.md
 ```
 
 ## 10. Create Roadmap
@@ -530,7 +531,7 @@ Success criteria:
 
 **Commit roadmap** (after approval):
 ```bash
-gsd-sdk query commit "docs: create milestone v[X.Y] roadmap ([N] phases)" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
+gsd_run query commit "docs: create milestone v[X.Y] roadmap ([N] phases)" --files .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md
 ```
 
 ## 10.5. Link Pending Todos to Roadmap Phases
@@ -573,7 +574,7 @@ files: [existing]
 
 **If any todos were linked:**
 ```bash
-gsd-sdk query commit "docs: tag [count] pending todos with resolves_phase after milestone v[X.Y] roadmap" --files .planning/todos/pending/*.md
+gsd_run query commit "docs: tag [count] pending todos with resolves_phase after milestone v[X.Y] roadmap" --files .planning/todos/pending/*.md
 ```
 
 Print a summary:
@@ -607,9 +608,9 @@ Print a summary:
 
 `/clear` then:
 
-`/gsd:discuss-phase [N] ${GSD_WS}` — gather context and clarify approach
+`/gsd-discuss-phase [N] ${GSD_WS}` — gather context and clarify approach
 
-Also: `/gsd:plan-phase [N] ${GSD_WS}` — skip discussion, plan directly
+Also: `/gsd-plan-phase [N] ${GSD_WS}` — skip discussion, plan directly
 ```
 
 </process>
@@ -627,7 +628,7 @@ Also: `/gsd:plan-phase [N] ${GSD_WS}` — skip discussion, plan directly
 - [ ] Phase numbering mode respected (continued or reset)
 - [ ] All commits made (if planning docs committed)
 - [ ] Pending todos scanned for phase matches; matched todos tagged with `resolves_phase: N`
-- [ ] User knows next step: `/gsd:discuss-phase [N] ${GSD_WS}`
+- [ ] User knows next step: `/gsd-discuss-phase [N] ${GSD_WS}`
 
 **Atomic commits:** Each phase commits its artifacts immediately.
 </success_criteria>

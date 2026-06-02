@@ -43,7 +43,8 @@ echo "$ARGUMENTS" | grep -qE '\-\-ws\s+\S+' && GSD_WS=$(echo "$ARGUMENTS" | grep
 ## 1.5. Config Gate (feature disabled by default)
 
 ```bash
-CONVERGENCE_ENABLED=$(gsd-sdk query config-get workflow.plan_review_convergence 2>/dev/null || echo "false")
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+CONVERGENCE_ENABLED=$(gsd_run query config-get workflow.plan_review_convergence 2>/dev/null || echo "false")
 ```
 
 **If `CONVERGENCE_ENABLED` is not `"true"`:** Display and exit:
@@ -56,7 +57,7 @@ Enable it with:
 
   gsd config-set workflow.plan_review_convergence true
 
-Then re-run: /gsd:plan-review-convergence {PHASE}
+Then re-run: /gsd-plan-review-convergence {PHASE}
 ```
 
 ## 2. Initialize
@@ -102,7 +103,7 @@ Display: `◆ No plans found — spawning initial planning agent...`
 ```text
 Agent(
   description="Initial planning Phase {PHASE}",
-  prompt="Run /gsd:plan-phase for Phase {PHASE}.
+  prompt="Run /gsd-plan-phase for Phase {PHASE}.
 
 Execute: Skill(skill='gsd-plan-phase', args='{PHASE} {GSD_WS}')
 
@@ -138,7 +139,7 @@ Display: `◆ Cycle {cycle}/{MAX_CYCLES} — spawning review agent...`
 ```text
 Agent(
   description="Cross-AI review Phase {PHASE} cycle {cycle}",
-  prompt="Run /gsd:review for Phase {PHASE}.
+  prompt="Run /gsd-review for Phase {PHASE}.
 
 Execute: Skill(skill='gsd-review', args='--phase {PHASE} {REVIEWER_FLAGS} {GSD_WS}')
 
@@ -174,6 +175,22 @@ Your final response MUST also include this section immediately after the CYCLE_S
   mode="auto"
 )
 ```
+
+### Source-grounding pass (config: `plan_review.source_grounding`, default on)
+
+Run this pass unless `plan_review.source_grounding` is `false`. It verifies every symbol the plan cites against the project source before approval, catching hallucinated symbols at review time instead of execution time.
+
+1. **Enumerate cited symbols.** List every referenced symbol by kind, quoting the plan line for each (coverage must be auditable): decorators (`@name`), classes/methods (`Class.method`), functions (`module.function`), CLI flags (`--name`), file paths, dataclass/struct fields.
+2. **Exclude new artifacts.** Do NOT verify symbols the plan declares under its "Artifacts this phase produces" section — those are created by this phase, not references to existing code.
+3. **Resolve each remaining symbol** using the adapter named by `plan_review.source_grounding_authority` (default `grep`):
+   - `grep` — ripgrep / Read the source; confirm the name appears as a real declaration.
+   - `intel` — consult `.planning/intel/API-SURFACE.md` / `api-map.json` (only when `intel.enabled`).
+   Record one verdict per symbol: **VERIFIED** (quote `file:line`), **MISSING** (adapter can check this language/kind and the symbol is absent), **AMBIGUOUS** (multiple candidates), or **UNCHECKABLE** (adapter cannot analyze this language/kind — e.g. non-JS under `intel`, or any signature under `grep`). Never treat UNCHECKABLE as verified or missing.
+4. **Severity & gating:**
+   - **MISSING** at authority `grep`/`intel` → `needs-acknowledgement`: the plan proceeds only if the author confirms the symbol is genuinely new or dynamically resolved, and that acknowledgement is recorded. A hard block is reserved for higher-authority adapters (LSP/SCIP) that can prove absence.
+   - **AMBIGUOUS** → MEDIUM. **UNCHECKABLE** → INFO.
+   - Signature mismatches cannot be asserted under `grep`/`intel`; report the signature as UNCHECKABLE.
+5. **Coverage block.** Append a "Verification coverage" section to `REVIEWS.md` listing every UNCHECKABLE/skipped symbol and why — a clean review must never silently mean "nothing was checked."
 
 After agent returns, verify REVIEWS.md exists:
 ```bash
@@ -226,7 +243,7 @@ Display:
  No HIGH concerns remaining.
 
  REVIEWS.md: {REVIEWS_FILE}
- Next: /gsd:execute-phase {PHASE}
+ Next: /gsd-execute-phase {PHASE}
 ```
 
 Exit — convergence achieved.
@@ -280,8 +297,8 @@ If "Manual review":
 ```text
 Review the concerns in: {REVIEWS_FILE}
 
-To replan manually:  /gsd:plan-phase {PHASE} --reviews
-To restart loop:     /gsd:plan-review-convergence {PHASE} {REVIEWER_FLAGS}
+To replan manually:  /gsd-plan-phase {PHASE} --reviews
+To restart loop:     /gsd-plan-review-convergence {PHASE} {REVIEWER_FLAGS}
 ```
 Exit workflow.
 
@@ -296,7 +313,7 @@ Display: `◆ Spawning replan agent with review feedback...`
 ```text
 Agent(
   description="Replan Phase {PHASE} with review feedback cycle {cycle}",
-  prompt="Run /gsd:plan-phase with --reviews for Phase {PHASE}.
+  prompt="Run /gsd-plan-phase with --reviews for Phase {PHASE}.
 
 Execute: Skill(skill='gsd-plan-phase', args='{PHASE} --reviews --skip-research {GSD_WS}')
 

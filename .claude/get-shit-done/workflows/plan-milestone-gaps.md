@@ -1,5 +1,5 @@
 <purpose>
-Create all phases necessary to close gaps identified by `/gsd:audit-milestone`. Reads MILESTONE-AUDIT.md, groups gaps into logical phases, creates phase entries in ROADMAP.md, and offers to plan each phase. One command creates all fix phases — no manual `/gsd-add-phase` per gap.
+Create all phases necessary to close gaps identified by `/gsd-audit-milestone`. Reads MILESTONE-AUDIT.md, groups gaps into logical phases, creates phase entries in ROADMAP.md, and offers to plan each phase. One command creates all fix phases — no manual `/gsd-add-phase` per gap.
 </purpose>
 
 <required_reading>
@@ -22,7 +22,7 @@ Parse YAML frontmatter to extract structured gaps:
 
 If no audit file exists or has no gaps, error:
 ```
-No audit gaps found. Run `/gsd:audit-milestone` first.
+No audit gaps found. Run `/gsd-audit-milestone` first.
 ```
 
 ## 2. Prioritize Gaps
@@ -64,8 +64,9 @@ Gap: Flow "View dashboard" broken at data fetch
 
 Find highest existing phase:
 ```bash
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
 # Get sorted phase list, extract last one
-HIGHEST=$(gsd-sdk query phases.list --pick directories[-1])
+HIGHEST=$(gsd_run query phases.list --pick directories[-1])
 ```
 
 New phases continue from there:
@@ -142,7 +143,7 @@ grep -c "Pending" .planning/REQUIREMENTS.md
 For each new phase (N, N+1, …), resolve the directory name via `init.phase-op` so the `project_code` prefix is honoured:
 
 ```bash
-INIT=$(gsd-sdk query init.phase-op "{NN}")
+INIT=$(gsd_run query init.phase-op "{NN}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 expected_phase_dir=$(echo "$INIT" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).expected_phase_dir)")
 mkdir -p "${expected_phase_dir}"
@@ -153,7 +154,7 @@ Repeat for each gap-closure phase number. This produces `{CODE}-{NN}-{slug}/` wh
 ## 9. Commit Roadmap and Requirements Update
 
 ```bash
-gsd-sdk query commit "docs(roadmap): add gap closure phases {N}-{M}" --files .planning/ROADMAP.md .planning/REQUIREMENTS.md
+gsd_run query commit "docs(roadmap): add gap closure phases {N}-{M}" --files .planning/ROADMAP.md .planning/REQUIREMENTS.md
 ```
 
 ## 10. Offer Next Steps
@@ -172,20 +173,20 @@ gsd-sdk query commit "docs(roadmap): add gap closure phases {N}-{M}" --files .pl
 
 `/clear` then:
 
-`/gsd:plan-phase {N}`
+`/gsd-plan-phase {N}`
 
 ---
 
 **Also available:**
-- `/gsd:execute-phase {N}` — if plans already exist
+- `/gsd-execute-phase {N}` — if plans already exist
 - `cat .planning/ROADMAP.md` — see updated roadmap
 
 ---
 
 **After all gap phases complete:**
 
-`/gsd:audit-milestone` — re-audit to verify gaps closed
-`/gsd:complete-milestone {version}` — archive when audit passes
+`/gsd-audit-milestone` — re-audit to verify gaps closed
+`/gsd-complete-milestone {version}` — archive when audit passes
 ```
 
 </process>
@@ -276,5 +277,5 @@ becomes:
 - [ ] Coverage count updated in REQUIREMENTS.md
 - [ ] Phase directories created
 - [ ] Changes committed (includes REQUIREMENTS.md)
-- [ ] User knows to run `/gsd:plan-phase` next
+- [ ] User knows to run `/gsd-plan-phase` next
 </success_criteria>

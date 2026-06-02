@@ -1,7 +1,7 @@
 <purpose>
 Spike an idea through experiential exploration — build focused experiments to feel the pieces
 of a future app, validate feasibility, and produce verified knowledge for the real build.
-Saves artifacts to `.planning/spikes/`. Companion to `/gsd:spike --wrap-up`.
+Saves artifacts to `.planning/spikes/`. Companion to `/gsd-spike --wrap-up`.
 
 Supports two modes:
 - **Idea mode** (default) — user describes an idea to spike
@@ -96,7 +96,8 @@ ls -d .planning/spikes/[0-9][0-9][0-9]-* 2>/dev/null | sort | tail -1
 
 Check `commit_docs` config:
 ```bash
-COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+COMMIT_DOCS=$(gsd_run query config-get commit_docs 2>/dev/null || echo "true")
 ```
 </step>
 
@@ -334,7 +335,7 @@ tags: [tag1, tag2]
 
 **i.** Commit (if `COMMIT_DOCS` is true):
 ```bash
-gsd-sdk query commit "docs(spike-NNN): [VERDICT] — [key finding]" --files .planning/spikes/NNN-descriptive-name/ .planning/spikes/MANIFEST.md
+gsd_run query commit "docs(spike-NNN): [VERDICT] — [key finding]" --files .planning/spikes/NNN-descriptive-name/ .planning/spikes/MANIFEST.md
 ```
 
 **j.** Report:
@@ -388,7 +389,7 @@ Only include patterns that repeated across 2+ spikes or were explicitly chosen b
 
 Commit (if `COMMIT_DOCS` is true):
 ```bash
-gsd-sdk query commit "docs(spikes): update conventions" --files .planning/spikes/CONVENTIONS.md
+gsd_run query commit "docs(spikes): update conventions" --files .planning/spikes/CONVENTIONS.md
 ```
 </step>
 
@@ -421,14 +422,14 @@ gsd-sdk query commit "docs(spikes): update conventions" --files .planning/spikes
 
 **Package findings** — wrap spike knowledge into an implementation blueprint
 
-`/gsd:spike --wrap-up`
+`/gsd-spike --wrap-up`
 
 ───────────────────────────────────────────────────────────────
 
 **Also available:**
-- `/gsd:spike` — spike more ideas (or run with no argument for frontier mode)
-- `/gsd:plan-phase` — start planning the real implementation
-- `/gsd:explore` — continue exploring the idea
+- `/gsd-spike` — spike more ideas (or run with no argument for frontier mode)
+- `/gsd-plan-phase` — start planning the real implementation
+- `/gsd-explore` — continue exploring the idea
 
 ───────────────────────────────────────────────────────────────
 </step>

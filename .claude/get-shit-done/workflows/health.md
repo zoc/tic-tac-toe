@@ -49,7 +49,8 @@ available — replace the prompt with a plain-text two-question sequence
 plain text from the user's response.
 
 ```bash
-gsd-sdk query validate.context \
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+gsd_run query validate.context \
   --tokens-used "$TOKENS_USED" \
   --context-window "$CONTEXT_WINDOW"
 ```
@@ -64,7 +65,7 @@ health output, the two modes are independent diagnostics.
 **Run health validation:**
 
 ```bash
-gsd-sdk query validate.health $REPAIR_FLAG $BACKFILL_FLAG
+gsd_run query validate.health $REPAIR_FLAG $BACKFILL_FLAG
 ```
 
 Parse JSON output:
@@ -101,10 +102,10 @@ Errors: N | Warnings: N | Info: N
 ## Errors
 
 - [E001] config.json: JSON parse error at line 5
-  Fix: Run /gsd:health --repair to reset to defaults
+  Fix: Run /gsd-health --repair to reset to defaults
 
 - [E002] PROJECT.md not found
-  Fix: Run /gsd:new-project to create
+  Fix: Run /gsd-new-project to create
 ```
 
 **If warnings exist:**
@@ -129,7 +130,7 @@ Errors: N | Warnings: N | Info: N
 **Footer (if repairable issues exist and --repair was NOT used):**
 ```
 ---
-N issues can be auto-repaired. Run: /gsd:health --repair
+N issues can be auto-repaired. Run: /gsd-health --repair
 ```
 </step>
 
@@ -139,7 +140,7 @@ N issues can be auto-repaired. Run: /gsd:health --repair
 Ask user if they want to run repairs:
 
 ```
-Would you like to run /gsd:health --repair to fix N issues automatically?
+Would you like to run /gsd-health --repair to fix N issues automatically?
 ```
 
 If yes, re-run with --repair flag and display results.
@@ -151,7 +152,7 @@ If yes, re-run with --repair flag and display results.
 Re-run health check without --repair to confirm issues are resolved:
 
 ```bash
-gsd-sdk query validate.health
+gsd_run query validate.health
 ```
 
 Report final status.

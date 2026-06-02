@@ -1,7 +1,7 @@
 <purpose>
 Explore design directions through throwaway HTML mockups before committing to implementation.
 Each sketch produces 2-3 variants for comparison. Saves artifacts to `.planning/sketches/`.
-Companion to `/gsd:sketch --wrap-up`.
+Companion to `/gsd-sketch --wrap-up`.
 
 Supports two modes:
 - **Idea mode** (default) — user describes a design idea to sketch
@@ -99,7 +99,8 @@ ls -d .planning/sketches/[0-9][0-9][0-9]-* 2>/dev/null | sort | tail -1
 
 Check `commit_docs` config:
 ```bash
-COMMIT_DOCS=$(gsd-sdk query config-get commit_docs 2>/dev/null || echo "true")
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+COMMIT_DOCS=$(gsd_run query config-get commit_docs 2>/dev/null || echo "true")
 ```
 </step>
 
@@ -296,7 +297,7 @@ Iterate until satisfied.
 
 **h.** Commit (if `COMMIT_DOCS` is true):
 ```bash
-gsd-sdk query commit "docs(sketch-NNN): [winning direction] — [key visual insight]" --files .planning/sketches/NNN-descriptive-name/ .planning/sketches/MANIFEST.md
+gsd_run query commit "docs(sketch-NNN): [winning direction] — [key visual insight]" --files .planning/sketches/NNN-descriptive-name/ .planning/sketches/MANIFEST.md
 ```
 
 **i.** Report:
@@ -331,14 +332,14 @@ After all sketches complete:
 
 **Package findings** — wrap design decisions into a reusable skill
 
-`/gsd:sketch --wrap-up`
+`/gsd-sketch --wrap-up`
 
 ───────────────────────────────────────────────────────────────
 
 **Also available:**
-- `/gsd:sketch` — sketch more (or run with no argument for frontier mode)
-- `/gsd:plan-phase` — start building the real UI
-- `/gsd:spike` — spike technical feasibility of a design pattern
+- `/gsd-sketch` — sketch more (or run with no argument for frontier mode)
+- `/gsd-plan-phase` — start building the real UI
+- `/gsd-spike` — spike technical feasibility of a design pattern
 
 ───────────────────────────────────────────────────────────────
 </step>

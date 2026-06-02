@@ -16,19 +16,20 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 ## 0. Initialize
 
 ```bash
-INIT=$(gsd-sdk query init.phase-op "${PHASE_ARG}")
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+INIT=$(gsd_run query init.phase-op "${PHASE_ARG}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
-AGENT_SKILLS_AUDITOR=$(gsd-sdk query agent-skills gsd-security-auditor)
+AGENT_SKILLS_AUDITOR=$(gsd_run query agent-skills gsd-security-auditor)
 ```
 
 Parse: `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `padded_phase`.
 
 ```bash
-AUDITOR_MODEL=$(gsd-sdk query resolve-model gsd-security-auditor --raw)
-SECURITY_CFG=$(gsd-sdk query config-get workflow.security_enforcement --raw 2>/dev/null || echo "true")
+AUDITOR_MODEL=$(gsd_run query resolve-model gsd-security-auditor --raw)
+SECURITY_CFG=$(gsd_run query config-get workflow.security_enforcement --raw 2>/dev/null || echo "true")
 ```
 
-If `SECURITY_CFG` is `false`: exit with "Security enforcement disabled. Enable via /gsd:settings."
+If `SECURITY_CFG` is `false`: exit with "Security enforcement disabled. Enable via /gsd-settings."
 
 Display banner: `GSD > SECURE PHASE {N}: {name}`
 
@@ -42,7 +43,7 @@ SUMMARY_FILES=$(ls "${PHASE_DIR}"/*-SUMMARY.md 2>/dev/null)
 
 - **State A** (`SECURITY_FILE` non-empty): Audit existing
 - **State B** (`SECURITY_FILE` empty, `PLAN_FILES` and `SUMMARY_FILES` non-empty): Run from artifacts
-- **State C** (`SUMMARY_FILES` empty): Exit — "Phase {N} not executed. Run /gsd:execute-phase {N} first."
+- **State C** (`SUMMARY_FILES` empty): Exit — "Phase {N} not executed. Run /gsd-execute-phase {N} first."
 
 ## 2. Discovery
 
@@ -137,7 +138,7 @@ Handle return:
 ```
 GSD > PHASE {N} SECURITY BLOCKED
 {K} threats open — phase advancement blocked until threats_open: 0
-▶ Fix mitigations then re-run: /gsd:secure-phase {N}
+▶ Fix mitigations then re-run: /gsd-secure-phase {N}
 ▶ Or document accepted risks in SECURITY.md and re-run.
 ```
 
@@ -146,7 +147,7 @@ Do NOT emit next-phase routing. Stop here.
 ## 7. Commit
 
 ```bash
-gsd-sdk query commit "docs(phase-${PHASE}): add/update security threat verification"
+gsd_run query commit "docs(phase-${PHASE}): add/update security threat verification"
 ```
 
 ## 8. Results + Routing
@@ -155,8 +156,8 @@ gsd-sdk query commit "docs(phase-${PHASE}): add/update security threat verificat
 ```
 GSD > PHASE {N} THREAT-SECURE
 threats_open: 0 — all threats have dispositions.
-▶ /gsd:validate-phase {N}    validate test coverage
-▶ /gsd:verify-work {N}       run UAT
+▶ /gsd-validate-phase {N}    validate test coverage
+▶ /gsd-verify-work {N}       run UAT
 ```
 
 Display `/clear` reminder.

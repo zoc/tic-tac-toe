@@ -34,14 +34,15 @@ Exit.
 Load phase operation context:
 
 ```bash
-INIT=$(gsd-sdk query init.phase-op "${target}")
+_GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/get-shit-done/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found at $GSD_TOOLS and gsd-tools is not on PATH. Run: npx -y @opengsd/gsd-core@latest --claude --local" >&2; exit 1; fi
+INIT=$(gsd_run query init.phase-op "${target}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
 Check `roadmap_exists` from init JSON. If false:
 ```
 ERROR: No roadmap found (.planning/ROADMAP.md)
-Run /gsd:new-project to initialize.
+Run /gsd-new-project to initialize.
 ```
 Exit.
 </step>
@@ -50,7 +51,7 @@ Exit.
 Read the current phase section from ROADMAP.md:
 
 ```bash
-PHASE_DATA=$(gsd-sdk query roadmap get-phase "${target}")
+PHASE_DATA=$(gsd_run query roadmap get-phase "${target}")
 ```
 
 Parse the JSON result. If `found` is false:
@@ -58,7 +59,7 @@ Parse the JSON result. If `found` is false:
 ```
 ERROR: Phase {target} not found in ROADMAP.md
 
-Available phases can be seen with /gsd:progress.
+Available phases can be seen with /gsd-progress.
 ```
 
 Exit.
@@ -78,7 +79,7 @@ Also parse the full section text to extract additional fields not in the SDK res
 Determine the phase status from disk. Compare against STATE.md current phase:
 
 ```bash
-ANALYZE=$(gsd-sdk query roadmap analyze)
+ANALYZE=$(gsd_run query roadmap analyze)
 ```
 
 Find the phase entry in the `phases` array. Extract `disk_status`.
@@ -180,7 +181,7 @@ Wait for user input. Use the clarified intent to rewrite all fields:
 If `depends_on` is being updated (or preserved as non-empty), validate that every referenced phase number exists in ROADMAP.md:
 
 ```bash
-ALL_PHASES=$(gsd-sdk query roadmap analyze)
+ALL_PHASES=$(gsd_run query roadmap analyze)
 ```
 
 Parse the `phases` array to get all valid phase numbers.
@@ -239,7 +240,7 @@ Read the full ROADMAP.md content, locate the phase section by its header (`## Ph
 After writing ROADMAP.md, update STATE.md Roadmap Evolution:
 
 ```bash
-gsd-sdk query state.add-roadmap-evolution \
+gsd_run query state.add-roadmap-evolution \
   --phase {target} \
   --action edited \
   --note "edited fields: {changed_field_list}"
@@ -258,9 +259,9 @@ Fields changed: {changed_field_list}
 
 ## What's Next
 
-- `/gsd:progress` — view updated roadmap
-- `/gsd:plan-phase {target}` — re-plan this phase (if needed)
-- `/gsd:discuss-phase {target}` — discuss implementation approach
+- `/gsd-progress` — view updated roadmap
+- `/gsd-plan-phase {target}` — re-plan this phase (if needed)
+- `/gsd-discuss-phase {target}` — discuss implementation approach
 
 ---
 ```
