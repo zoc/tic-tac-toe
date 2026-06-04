@@ -21,7 +21,7 @@ Routes to the settings workflow which handles:
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/settings.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/settings.md
 </execution_context>
 
 <process>

@@ -18,7 +18,7 @@ changes that are irrelevant to code review.
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/pr-branch.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/pr-branch.md
 </execution_context>
 
 <process>

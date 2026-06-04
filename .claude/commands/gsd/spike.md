@@ -30,9 +30,9 @@ Does not require prior new-project setup — auto-creates `.planning/spikes/` if
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/spike.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/spike-wrap-up.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/spike.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/spike-wrap-up.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <runtime_note>

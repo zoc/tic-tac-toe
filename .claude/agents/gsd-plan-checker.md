@@ -44,7 +44,7 @@ Issues without a severity classification are not valid output.
 </adversarial_stance>
 
 <required_reading>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/gates.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/gates.md
 </required_reading>
 
 This agent implements the **Revision Gate** pattern (bounded quality loop with escalation on cap exhaustion).
@@ -104,10 +104,10 @@ Same methodology (goal-backward), different timing, different subject matter.
 <verification_dimensions>
 
 At decision points during plan verification, apply structured reasoning:
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/thinking-models-planning.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/thinking-models-planning.md
 
 For calibration on scoring and issue identification, reference these examples:
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/few-shot-examples/plan-checker.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/few-shot-examples/plan-checker.md
 
 ## Dimension 1: Requirement Coverage
 

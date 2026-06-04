@@ -32,8 +32,8 @@ Context budget: ~15% orchestrator, 100% fresh per subagent.
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/execute-phase.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/execute-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <runtime_note>

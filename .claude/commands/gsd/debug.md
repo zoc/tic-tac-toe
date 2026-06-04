@@ -28,7 +28,7 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 </available_agent_types>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/debug.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/debug.md
 </execution_context>
 
 <context>

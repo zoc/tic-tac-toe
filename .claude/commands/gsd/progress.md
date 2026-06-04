@@ -30,10 +30,10 @@ Three modes:
 </flags>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/progress.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/next.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/do.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/progress.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/next.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/do.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <process>

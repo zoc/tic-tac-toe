@@ -16,7 +16,7 @@ Output ONLY the reference content of the chosen tier. Do NOT add:
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/help.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/help.md
 </execution_context>
 
 <context>
@@ -24,5 +24,5 @@ Arguments: $ARGUMENTS
 </context>
 
 <process>
-Follow /Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/help.md with $ARGUMENTS.
+Follow /Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/help.md with $ARGUMENTS.
 </process>

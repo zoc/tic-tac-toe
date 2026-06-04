@@ -31,10 +31,10 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/add-phase.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/insert-phase.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/remove-phase.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/edit-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/add-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/insert-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/remove-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/edit-phase.md
 </execution_context>
 
 <context>

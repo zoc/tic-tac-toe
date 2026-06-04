@@ -26,8 +26,8 @@ Uses ROADMAP.md phase discovery and Skill() flat invocations for each phase comm
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/autonomous.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/autonomous.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

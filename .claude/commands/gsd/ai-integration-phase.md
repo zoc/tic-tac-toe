@@ -22,9 +22,9 @@ Flow: Select Framework → Research Docs → Research Domain → Design Eval Str
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/ai-integration-phase.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ai-frameworks.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ai-evals.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/ai-integration-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ai-frameworks.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ai-evals.md
 </execution_context>
 
 <context>

@@ -29,10 +29,10 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/new-workspace.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/list-workspaces.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/remove-workspace.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/new-workspace.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/list-workspaces.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/remove-workspace.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

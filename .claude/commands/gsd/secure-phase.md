@@ -23,7 +23,7 @@ Output: updated SECURITY.md.
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/secure-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/secure-phase.md
 </execution_context>
 
 <context>

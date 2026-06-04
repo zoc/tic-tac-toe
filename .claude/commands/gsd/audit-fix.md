@@ -26,7 +26,7 @@ Flags:
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/audit-fix.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/audit-fix.md
 </execution_context>
 
 <process>

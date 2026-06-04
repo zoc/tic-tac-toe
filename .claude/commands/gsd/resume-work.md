@@ -22,7 +22,7 @@ Routes to the resume-project workflow which handles:
   </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/resume-project.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/resume-project.md
 </execution_context>
 
 <process>

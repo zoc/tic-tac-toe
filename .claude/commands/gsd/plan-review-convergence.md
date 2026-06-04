@@ -25,10 +25,10 @@ Replaces gsd-plan-phase's internal gsd-plan-checker with external AI reviewers (
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/plan-review-convergence.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/revision-loop.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/gates.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/agent-contracts.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/plan-review-convergence.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/revision-loop.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/gates.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/agent-contracts.md
 </execution_context>
 
 <runtime_note>

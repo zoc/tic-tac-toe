@@ -19,8 +19,8 @@ Produces EVAL-REVIEW.md with score, verdict, gaps, and remediation plan.
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/eval-review.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ai-evals.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/eval-review.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ai-evals.md
 </execution_context>
 
 <context>

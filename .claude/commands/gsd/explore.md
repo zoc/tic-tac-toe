@@ -19,7 +19,7 @@ Accepts an optional topic argument: `/gsd-explore authentication strategy`
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/explore.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/explore.md
 </execution_context>
 
 <process>

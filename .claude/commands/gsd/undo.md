@@ -21,9 +21,9 @@ Three modes:
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/undo.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/gate-prompts.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/undo.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/gate-prompts.md
 </execution_context>
 
 <context>

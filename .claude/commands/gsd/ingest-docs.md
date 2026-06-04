@@ -27,10 +27,10 @@ Auto-synthesizes most conflicts using the precedence rule `ADR > SPEC > PRD > DO
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/ingest-docs.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/gate-prompts.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/doc-conflict-engine.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/ingest-docs.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/gate-prompts.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/doc-conflict-engine.md
 </execution_context>
 
 <context>

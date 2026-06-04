@@ -31,7 +31,7 @@ Output: {padded_phase}-REVIEW.md in phase directory + inline summary of findings
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/code-review.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/code-review.md
 </execution_context>
 
 <context>

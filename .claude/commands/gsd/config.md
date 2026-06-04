@@ -32,9 +32,9 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/settings.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/settings-advanced.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/settings-integrations.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/settings.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/settings-advanced.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/settings-integrations.md
 </execution_context>
 
 <context>

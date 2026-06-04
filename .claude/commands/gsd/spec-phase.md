@@ -29,8 +29,8 @@ Clarify phase requirements through structured Socratic questioning with quantita
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/spec-phase.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/templates/spec.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/spec-phase.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/templates/spec.md
 </execution_context>
 
 <runtime_note>

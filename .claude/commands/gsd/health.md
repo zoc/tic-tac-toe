@@ -22,7 +22,7 @@ Validate `.planning/` directory integrity and report actionable issues. Checks f
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/health.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/health.md
 </execution_context>
 
 <process>

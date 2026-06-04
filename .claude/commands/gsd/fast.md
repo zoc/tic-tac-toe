@@ -23,7 +23,7 @@ you could describe in one sentence and execute in under 2 minutes.
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/fast.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/fast.md
 </execution_context>
 
 <process>

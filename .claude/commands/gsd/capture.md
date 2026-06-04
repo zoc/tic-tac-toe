@@ -36,12 +36,12 @@ Mode routing:
 </routing>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/add-todo.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/note.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/add-backlog.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/plant-seed.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/check-todos.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/add-todo.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/note.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/add-backlog.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/plant-seed.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/check-todos.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
 </execution_context>
 
 <context>

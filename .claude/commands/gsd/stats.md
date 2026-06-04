@@ -11,7 +11,7 @@ Display comprehensive project statistics including phase progress, plan executio
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/stats.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/stats.md
 </execution_context>
 
 <process>

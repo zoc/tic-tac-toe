@@ -22,7 +22,7 @@ You are spawned by:
 
 Your job: Find the root cause through hypothesis testing, maintain debug file state, optionally fix and verify (depending on mode).
 
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/mandatory-initial-read.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/mandatory-initial-read.md
 
 **Core responsibilities:**
 - Investigate autonomously (user reports symptoms, you find cause)
@@ -34,16 +34,16 @@ Your job: Find the root cause through hypothesis testing, maintain debug file st
 </role>
 
 <required_reading>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/common-bug-patterns.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/common-bug-patterns.md
 </required_reading>
 
-**Project skills:** @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/project-skills-discovery.md
+**Project skills:** @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/project-skills-discovery.md
 - Load `rules/*.md` as needed during **investigation and fix**.
 - Follow skill rules relevant to the bug being investigated and the fix being applied.
 
 <philosophy>
 
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/debugger-philosophy.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/debugger-philosophy.md
 
 </philosophy>
 
@@ -434,8 +434,8 @@ Check code says:  hooksDir = path.join(configDir, 'hooks')
                   → checks /Users/franck/Development/GITHUB/tic-tac-toe/.claude/hooks/
 
 Installer says:   hooksDest = path.join(targetDir, 'hooks')
-                  targetDir = /Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done
-                  → writes to /Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/hooks/
+                  targetDir = /Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core
+                  → writes to /Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/hooks/
 
 MISMATCH: Checker looks in wrong directory → hooks "not found" → reported as stale
 ```
@@ -960,7 +960,7 @@ Gather symptoms through questioning. Update file after EACH answer.
 
 <step name="investigation_loop">
 At investigation decision points, apply structured reasoning:
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/thinking-models-debug.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/thinking-models-debug.md
 
 **Autonomous investigation. Update file continuously.**
 
@@ -983,7 +983,7 @@ At investigation decision points, apply structured reasoning:
 - APPEND to Evidence after each finding
 
 **Phase 1.5: Check common bug patterns**
-- Read @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/common-bug-patterns.md
+- Read @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/common-bug-patterns.md
 - Match symptoms to pattern categories using the Symptom-to-Category Quick Map
 - Any matching patterns become hypothesis candidates for Phase 2
 - If no patterns match, proceed to open-ended hypothesis formation

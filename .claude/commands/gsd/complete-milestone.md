@@ -20,8 +20,8 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 <execution_context>
 **Load these files NOW (before proceeding):**
 
-- @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
-- @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/templates/milestone-archive.md (archive template)
+- @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/complete-milestone.md (main workflow)
+- @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/templates/milestone-archive.md (archive template)
   </execution_context>
 
 <context>

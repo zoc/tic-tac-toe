@@ -21,8 +21,8 @@ Output: {phase_num}-UAT.md tracking all test results. If issues found: diagnosed
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/verify-work.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/templates/UAT.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/verify-work.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/templates/UAT.md
 </execution_context>
 
 <context>

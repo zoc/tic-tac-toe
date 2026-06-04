@@ -26,11 +26,11 @@ Brownfield equivalent of new-project. Project exists, PROJECT.md has history. Ga
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/new-milestone.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/questioning.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/references/ui-brand.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/templates/project.md
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/templates/requirements.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/new-milestone.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/questioning.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/ui-brand.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/templates/project.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/templates/requirements.md
 </execution_context>
 
 <context>

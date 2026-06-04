@@ -21,7 +21,7 @@ and optionally applies labels or closes non-compliant submissions.
 </objective>
 
 <execution_context>
-@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/get-shit-done/workflows/inbox.md
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/workflows/inbox.md
 </execution_context>
 
 <context>
