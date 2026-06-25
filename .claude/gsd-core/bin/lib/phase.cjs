@@ -21,8 +21,24 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 const node_fs_1 = __importDefault(require("node:fs"));
 const node_path_1 = __importDefault(require("node:path"));
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- core.cjs is an export= CommonJS module
-const core = require("./core.cjs");
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- io.cjs is an export= CommonJS module
+const ioMod = require("./io.cjs");
+const { output, error, ERROR_REASON } = ioMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- config-loader.cjs is an export= CommonJS module
+const configLoaderMod = require("./config-loader.cjs");
+const { loadConfig } = configLoaderMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- core-utils.cjs is an export= CommonJS module
+const coreUtilsMod = require("./core-utils.cjs");
+const { toPosixPath, generateSlugInternal, readSubdirectories } = coreUtilsMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- phase-id.cjs is an export= CommonJS module
+const phaseIdMod = require("./phase-id.cjs");
+const { escapeRegex, normalizePhaseName, phaseMarkdownRegexSource, comparePhaseNum, phaseTokenMatches, OPTIONAL_PROJECT_CODE_PREFIX_SOURCE, } = phaseIdMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- phase-locator.cjs is an export= CommonJS module
+const phaseLocatorMod = require("./phase-locator.cjs");
+const { findPhaseInternal, getArchivedPhaseDirs } = phaseLocatorMod;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- roadmap-parser.cjs is an export= CommonJS module
+const roadmapParserMod = require("./roadmap-parser.cjs");
+const { stripShippedMilestones, extractCurrentMilestone, getMilestonePhaseFilter } = roadmapParserMod;
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- planning-workspace.cjs is an export= CommonJS module
 const planningWorkspace = require("./planning-workspace.cjs");
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- frontmatter.cjs is an export= CommonJS module
@@ -32,14 +48,16 @@ const stateMod = require("./state.cjs");
 const shell_command_projection_cjs_1 = require("./shell-command-projection.cjs");
 const runtime_slash_cjs_1 = require("./runtime-slash.cjs");
 const phase_lifecycle_cjs_1 = require("./phase-lifecycle.cjs");
-const { escapeRegex, loadConfig, normalizePhaseName, phaseMarkdownRegexSource, comparePhaseNum, findPhaseInternal, getArchivedPhaseDirs, generateSlugInternal, getMilestonePhaseFilter, stripShippedMilestones, extractCurrentMilestone, replaceInCurrentMilestone, toPosixPath, output, error, readSubdirectories, phaseTokenMatches, ERROR_REASON, } = core;
+const clock_cjs_1 = require("./clock.cjs");
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- uat-predicate.cjs is an export= CommonJS module
+const uatPredicate = require("./uat-predicate.cjs");
+const { evaluateUatPassed } = uatPredicate;
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- verification.cjs is an export= CommonJS module
+const verificationMod = require("./verification.cjs");
+const { readVerificationStatus } = verificationMod;
 const { planningDir, withPlanningLock } = planningWorkspace;
 const { extractFrontmatter } = frontmatterMod;
 const { readModifyWriteStateMd, stateExtractField, stateReplaceField, stateReplaceFieldWithFallback, syncStateFrontmatter, withStateLock, updatePerformanceMetricsSection, } = stateMod;
-// Unused import silences TS — keep for structural parity with .cjs (stripShippedMilestones,
-// replaceInCurrentMilestone are exported from core but only used in phase.cjs as-is).
-void stripShippedMilestones;
-void replaceInCurrentMilestone;
 // #2893 — strict canonical filter: `{padded_phase}-{NN}-PLAN.md` or `PLAN.md`.
 const isCanonicalPlanFile = (f) => f.endsWith('-PLAN.md') || f === 'PLAN.md';
 // Any .md file with PLAN anywhere in the basename — diagnostic net
@@ -152,7 +170,7 @@ function cmdPhaseNextDecimal(cwd, basePhase, raw) {
             const entries = node_fs_1.default.readdirSync(phasesDir, { withFileTypes: true });
             const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
             baseExists = dirs.some((d) => phaseTokenMatches(d, normalized));
-            const dirPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalized)}\\.(\\d+)`);
+            const dirPattern = new RegExp(`^${OPTIONAL_PROJECT_CODE_PREFIX_SOURCE}${escapeRegex(normalized)}\\.(\\d+)`);
             for (const dir of dirs) {
                 const match = dir.match(dirPattern);
                 if (match)
@@ -295,7 +313,7 @@ function cmdFindPhase(cwd, phase, raw) {
             const match = dirs.find((d) => phaseTokenMatches(d, normalized));
             if (!match)
                 continue;
-            const dirMatch = match.match(/^(?:[A-Z]{1,6}-)(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i) ||
+            const dirMatch = match.match(new RegExp(`^${OPTIONAL_PROJECT_CODE_PREFIX_SOURCE}(\\d+[A-Z]?(?:\\.\\d+)*)-?(.*)`, 'i')) ||
                 match.match(/^(\d+[A-Z]?(?:\.\d+)*)-?(.*)/i);
             const phaseNumber = dirMatch ? dirMatch[1] : normalized;
             const phaseName = dirMatch && dirMatch[2] ? dirMatch[2] : null;
@@ -556,16 +574,29 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
             _dirName = `${prefix}${_newPhaseId}-${slug}`;
         }
         else {
-            const phasePattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
-            let maxPhase = 0;
+            // Collect all phase numbers visible in the current-milestone content.
+            // Three sources are scanned so that a phase in ANY representation
+            // (section header, roadmap bullet, or on-disk directory) is counted:
+            // 1) Section headers: ### Phase N: / ## Phase N: / #### Phase N:
+            const headerPattern = /#{2,4}\s*Phase\s+(\d+)[A-Z]?(?:\.\d+)*:/gi;
+            // 2) Roadmap bullet entries: - [ ] **Phase N: ...** (all checkbox variants)
+            // The lookahead accepts colon, decimal-dot, whitespace, bold-close asterisk,
+            // or end-of-line so titleless forms ("- [ ] **Phase 11**", "- [ ] Phase 11")
+            // are counted and cannot collide with a freshly-added phase. (#1229)
+            const bulletPattern = /^[ \t]*-[ \t]*\[[^\]]*\][ \t]*\*{0,2}Phase[ \t]+(\d+)(?=[:.\s*]|$)/gim;
+            const usedPhaseNums = new Set();
             let m;
-            while ((m = phasePattern.exec(content)) !== null) {
+            while ((m = headerPattern.exec(content)) !== null) {
                 const num = parseInt(m[1], 10);
-                if (num === 999)
-                    continue;
-                if (num > maxPhase)
-                    maxPhase = num;
+                if (num !== 999)
+                    usedPhaseNums.add(num);
             }
+            while ((m = bulletPattern.exec(content)) !== null) {
+                const num = parseInt(m[1], 10);
+                if (num !== 999)
+                    usedPhaseNums.add(num);
+            }
+            // 3) On-disk phase directories (e.g. phases/11-foo/ with no header yet)
             const phasesOnDisk = node_path_1.default.join(planningDir(cwd), 'phases');
             if (node_fs_1.default.existsSync(phasesOnDisk)) {
                 const dirNumPattern = /^(?:[A-Z][A-Z0-9]*-)?(\d+)-/;
@@ -574,13 +605,16 @@ function cmdPhaseAdd(cwd, description, raw, customId) {
                     if (!match)
                         continue;
                     const num = parseInt(match[1], 10);
-                    if (num === 999)
-                        continue;
-                    if (num > maxPhase)
-                        maxPhase = num;
+                    if (num !== 999)
+                        usedPhaseNums.add(num);
                 }
             }
-            _newPhaseId = maxPhase + 1;
+            // phase.add appends after the highest *used* number. Collecting numbers from
+            // section headers, roadmap bullets, AND on-disk dirs above is what prevents the
+            // #1229 collision (a bullet-only Phase N is now counted), so max+1 cannot reuse
+            // an existing number.
+            const maxUsed = usedPhaseNums.size > 0 ? Math.max(...usedPhaseNums) : 0;
+            _newPhaseId = maxUsed + 1;
             const paddedNum = String(_newPhaseId).padStart(2, '0');
             _dirName = `${prefix}${paddedNum}-${slug}`;
         }
@@ -725,7 +759,7 @@ function cmdPhaseInsert(cwd, afterPhase, description, raw) {
         try {
             const entries = node_fs_1.default.readdirSync(phasesDir, { withFileTypes: true });
             const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-            const decimalPattern = new RegExp(`^(?:[A-Z]{1,6}-)?${escapeRegex(normalizedBase)}\\.(\\d+)`);
+            const decimalPattern = new RegExp(`^${OPTIONAL_PROJECT_CODE_PREFIX_SOURCE}${escapeRegex(normalizedBase)}\\.(\\d+)`);
             for (const dir of dirs) {
                 const dm = dir.match(decimalPattern);
                 if (dm)
@@ -1009,6 +1043,22 @@ function writePlanningFileSet(writes) {
         throw err;
     }
 }
+function phaseDisplayNameFromRoadmap(roadmapContent, phaseNum) {
+    if (!roadmapContent || !phaseNum)
+        return null;
+    const phaseEscaped = phaseMarkdownRegexSource(phaseNum);
+    const heading = roadmapContent.match(new RegExp(`^#{2,4}\\s*Phase\\s+${phaseEscaped}\\s*:\\s*([^\\n]+)`, 'im'));
+    if (!heading)
+        return null;
+    const name = heading[1].replace(/\(INSERTED\)/i, '').trim();
+    return name || null;
+}
+function phaseDisplayNameFromSlug(slug) {
+    if (!slug)
+        return null;
+    const name = slug.replace(/-/g, ' ').trim();
+    return name || null;
+}
 function cmdPhaseComplete(cwd, phaseNum, raw) {
     if (!phaseNum) {
         error('phase number required for phase complete');
@@ -1016,7 +1066,7 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     const roadmapPath = node_path_1.default.join(planningDir(cwd), 'ROADMAP.md');
     const statePath = node_path_1.default.join(planningDir(cwd), 'STATE.md');
     const phasesDir = node_path_1.default.join(planningDir(cwd), 'phases');
-    const today = new Date().toISOString().split('T')[0];
+    const today = clock_cjs_1.realClock.today();
     const phaseInfoRaw = findPhaseInternal(cwd, phaseNum);
     if (!phaseInfoRaw) {
         error(`Phase ${phaseNum} not found`);
@@ -1030,8 +1080,8 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
         : 0;
     let requirementsUpdated = false;
     const warnings = [];
+    const phaseFullDir = node_path_1.default.join(cwd, phaseInfo['directory']);
     try {
-        const phaseFullDir = node_path_1.default.join(cwd, phaseInfo['directory']);
         const phaseFiles = node_fs_1.default.readdirSync(phaseFullDir);
         for (const file of phaseFiles.filter((f) => f.includes('-UAT') && f.endsWith('.md'))) {
             const content = node_fs_1.default.readFileSync(node_path_1.default.join(phaseFullDir, file), 'utf-8');
@@ -1046,9 +1096,17 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
         }
         for (const file of phaseFiles.filter((f) => f.includes('-VERIFICATION') && f.endsWith('.md'))) {
             const content = node_fs_1.default.readFileSync(node_path_1.default.join(phaseFullDir, file), 'utf-8');
-            if (/status: human_needed/.test(content))
+            // #1159 (Defect A): read ONLY the frontmatter `status` key to avoid false positives
+            // from historical metadata in the file body (e.g. `previous_status: gaps_found`).
+            // A full-text regex like /status: gaps_found/ matches the substring inside
+            // `previous_status: gaps_found`, producing spurious warnings even when the
+            // current frontmatter status is `passed`.
+            const verFm = extractFrontmatter(content);
+            // Normalise to lower-case so `status: Passed` (title-case) is not missed.
+            const verStatus = typeof verFm['status'] === 'string' ? verFm['status'].trim().toLowerCase() : '';
+            if (verStatus === 'human_needed')
                 warnings.push(`${file}: needs human verification`);
-            if (/status: gaps_found/.test(content))
+            if (verStatus === 'gaps_found')
                 warnings.push(`${file}: has unresolved gaps`);
         }
     }
@@ -1058,7 +1116,11 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     let nextPhaseNum = null;
     let nextPhaseName = null;
     let isLastPhase = true;
-    withPlanningLock(cwd, () => {
+    const verificationBlocked = withPlanningLock(cwd, () => {
+        const verificationStatus = readVerificationStatus(phaseFullDir);
+        if (verificationStatus.status !== 'passed') {
+            return verificationStatus;
+        }
         const runPhaseCompleteTransaction = () => {
             const writes = [];
             let roadmapContent = null;
@@ -1071,15 +1133,20 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                 const tableRowPattern = new RegExp(`^(\\|\\s*${phaseEscaped}\\.?\\s[^|]*(?:\\|[^\\n]*))$`, 'im');
                 roadmapContent = roadmapContent.replace(tableRowPattern, (fullRow) => {
                     const cells = fullRow.split('|').slice(1, -1);
+                    const dateShape = /^\d{4}-\d{2}-\d{2}$/;
                     if (cells.length === 5) {
                         cells[2] = ` ${summaryCount}/${planCount} `;
                         cells[3] = ' Complete    ';
-                        cells[4] = ` ${today} `;
+                        // Preserve only a valid ISO date (#1161: idempotent; self-heal garbage)
+                        const existingDate5 = cells[4].trim();
+                        cells[4] = dateShape.test(existingDate5) ? cells[4] : ` ${today} `;
                     }
                     else if (cells.length === 4) {
                         cells[1] = ` ${summaryCount}/${planCount} `;
                         cells[2] = ' Complete    ';
-                        cells[3] = ` ${today} `;
+                        // Preserve only a valid ISO date (#1161: idempotent; self-heal garbage)
+                        const existingDate4 = cells[3].trim();
+                        cells[3] = dateShape.test(existingDate4) ? cells[3] : ` ${today} `;
                     }
                     return '|' + cells.join('|') + '|';
                 });
@@ -1120,13 +1187,59 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                             reqContent = reqContent.replace(new RegExp(`(\\|\\s*${reqEscaped}\\s*\\|[^|]+\\|)\\s*(?:Pending|In Progress)\\s*(\\|)`, 'gi'), '$1 Complete $2');
                         }
                     }
+                    // #1159 (Defect B): collect requirement IDs only from ACTIVE sections.
+                    // Requirements under headings whose text contains "deferred", "backlog",
+                    // "future", or "v2" (case-insensitive) are explicitly out of current scope
+                    // and must not be flagged as missing from the Traceability table.
+                    //
+                    // Strategy: walk lines, track heading depth, and toggle a "deferred" flag
+                    // when a heading matching the pattern is encountered.  A sub-heading (higher
+                    // depth) that is ITSELF in a deferred parent remains deferred unless it
+                    // opens a same-or-shallower heading that does NOT match the pattern.
+                    // Lines inside fenced code blocks (``` or ~~~) are treated as content, not
+                    // headings, to avoid false deferred-section detection from code examples.
+                    const DEFERRED_HEADING_RE = /\b(?:deferred|backlog|future|v\d+)\b/i;
                     const bodyReqIds = [];
-                    const bodyReqPattern = /\*\*([A-Z][A-Z0-9]*-\d+)\*\*/g;
-                    let bodyMatch;
-                    while ((bodyMatch = bodyReqPattern.exec(reqContent)) !== null) {
-                        const id = bodyMatch[1];
-                        if (!bodyReqIds.includes(id))
-                            bodyReqIds.push(id);
+                    // deferredDepth: the heading level that opened the current deferred block,
+                    // or 0 when we are in an active section.
+                    let deferredDepth = 0;
+                    let inFence = false;
+                    for (const line of reqContent.split(/\r?\n/)) {
+                        // Track fenced code blocks (``` or ~~~).
+                        if (/^\s*(?:```|~~~)/.test(line)) {
+                            inFence = !inFence;
+                            continue;
+                        }
+                        if (inFence)
+                            continue; // ignore content inside a code fence
+                        const headingM = line.match(/^(#{1,6})\s+(.*)/);
+                        if (headingM) {
+                            const depth = headingM[1].length;
+                            const text = headingM[2];
+                            if (deferredDepth > 0 && depth > deferredDepth) {
+                                // Sub-heading inside a deferred block: stays deferred regardless of name.
+                                continue;
+                            }
+                            // Heading at same level or shallower than current deferred opener,
+                            // or no active deferred block yet.
+                            if (DEFERRED_HEADING_RE.test(text)) {
+                                deferredDepth = depth; // enter a deferred block
+                            }
+                            else {
+                                deferredDepth = 0; // back in an active section
+                            }
+                            continue;
+                        }
+                        if (deferredDepth > 0)
+                            continue; // skip content in deferred sections
+                        // Collect bold REQ-ID patterns from active-section lines.
+                        const reqPat = /\*\*([A-Z][A-Z0-9]*-\d+)\*\*/g;
+                        let bodyMatch;
+                        while ((bodyMatch = reqPat.exec(line)) !== null) {
+                            const id = bodyMatch[1];
+                            if (!bodyReqIds.includes(id))
+                                bodyReqIds.push(id);
+                        }
                     }
                     const traceabilityHeadingMatch = reqContent.match(/^#{1,6}\s+Traceability\b/im);
                     const traceabilitySection = traceabilityHeadingMatch
@@ -1197,6 +1310,8 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                 const originalStateContent = (0, shell_command_projection_cjs_1.platformReadSync)(statePath) || '';
                 let stateContent = originalStateContent;
                 const phaseValue = nextPhaseNum || phaseNum;
+                const nextPhaseDisplayName = phaseDisplayNameFromRoadmap(roadmapContent, nextPhaseNum) ??
+                    phaseDisplayNameFromSlug(nextPhaseName);
                 const existingPhaseField = stateExtractField(stateContent, 'Current Phase') ||
                     stateExtractField(stateContent, 'Phase');
                 let newPhaseValue = String(phaseValue);
@@ -1205,22 +1320,39 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
                     const nameMatch = existingPhaseField.match(/\(([^)]+)\)/);
                     if (totalMatch) {
                         const total = totalMatch[1];
-                        const nameStr = nextPhaseName
-                            ? ` (${nextPhaseName.replace(/-/g, ' ')})`
+                        const nameStr = nextPhaseDisplayName
+                            ? ` (${nextPhaseDisplayName})`
                             : nameMatch
                                 ? ` (${nameMatch[1]})`
                                 : '';
                         newPhaseValue = `${phaseValue} of ${total}${nameStr}`;
                     }
+                    else if (nextPhaseDisplayName) {
+                        newPhaseValue = `${phaseValue} — ${nextPhaseDisplayName}`;
+                    }
                 }
                 stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase', 'Phase', newPhaseValue);
-                if (nextPhaseName) {
-                    stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Phase Name', null, nextPhaseName.replace(/-/g, ' '));
+                if (nextPhaseDisplayName) {
+                    stateContent =
+                        stateReplaceField(stateContent, 'Current Phase Name', nextPhaseDisplayName) ||
+                            stateContent;
                 }
                 stateContent = stateReplaceFieldWithFallback(stateContent, 'Status', null, isLastPhase ? 'Milestone complete' : 'Ready to plan');
                 stateContent = stateReplaceFieldWithFallback(stateContent, 'Current Plan', 'Plan', 'Not started');
-                stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity', 'Last activity', today);
-                stateContent = stateReplaceFieldWithFallback(stateContent, 'Last Activity Description', null, `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`);
+                const lastActivityDescription = `Phase ${phaseNum} complete${nextPhaseNum ? `, transitioned to Phase ${nextPhaseNum}` : ''}`;
+                if (/^Last activity:/m.test(stateContent)) {
+                    stateContent =
+                        stateReplaceField(stateContent, 'Last activity', `${today} — ${lastActivityDescription}`) ||
+                            stateContent;
+                }
+                else {
+                    stateContent =
+                        stateReplaceField(stateContent, 'Last Activity', today) ||
+                            stateContent;
+                }
+                stateContent =
+                    stateReplaceField(stateContent, 'Last Activity Description', lastActivityDescription) ||
+                        stateContent;
                 const completedRaw = stateExtractField(stateContent, 'Completed Phases');
                 if (completedRaw !== null) {
                     let newCompleted = parseInt(completedRaw, 10);
@@ -1256,7 +1388,14 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
         else {
             runPhaseCompleteTransaction();
         }
+        return null;
     });
+    if (verificationBlocked) {
+        const nextStep = verificationBlocked.next_command
+            ? ` Next: ${verificationBlocked.next_command}`
+            : '';
+        error(`Phase ${phaseNum} verification is incomplete: ${verificationBlocked.next_action}${nextStep}`, ERROR_REASON.PHASE_VERIFICATION_INCOMPLETE);
+    }
     let autoPruned = false;
     try {
         const configPath = node_path_1.default.join(planningDir(cwd), 'config.json');
@@ -1292,6 +1431,47 @@ function cmdPhaseComplete(cwd, phaseNum, raw) {
     };
     output(result, raw);
 }
+function cmdPhaseUatPassed(cwd, phaseNum, raw, opts = {}) {
+    if (!phaseNum) {
+        error('phase number required for phase uat-passed');
+    }
+    const phaseInfoRaw = findPhaseInternal(cwd, phaseNum);
+    if (!phaseInfoRaw) {
+        error(`Phase ${phaseNum} not found`);
+    }
+    const phaseInfo = phaseInfoRaw;
+    const phaseFullDir = node_path_1.default.join(cwd, phaseInfo['directory']);
+    const report = evaluateUatPassed(phaseFullDir, { policy: opts.policy });
+    output({ phase: phaseNum, ...report }, raw);
+}
+// #1437 — phase.list-plans: list plan files for a given phase number.
+// Returns the full scan result from scanPhasePlans so callers can read plan
+// paths without re-discovering the phase directory themselves.
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- plan-scan.cjs is an export= CommonJS module
+const planScanMod = require("./plan-scan.cjs");
+const { scanPhasePlans } = planScanMod;
+function cmdPhaseListPlans(cwd, phaseNum, raw) {
+    if (!phaseNum) {
+        error('phase number required for phase list-plans');
+    }
+    const phaseInfo = findPhaseInternal(cwd, phaseNum);
+    if (!phaseInfo) {
+        output({ phase: phaseNum, plan_count: 0, has_plans: false, plans: [], phase_dir: null }, raw);
+        return;
+    }
+    const phaseDir = node_path_1.default.join(cwd, phaseInfo['directory']);
+    const scan = scanPhasePlans(phaseDir);
+    const phaseRel = phaseInfo['directory'];
+    // Build absolute-usable relative paths for each plan file.
+    const plans = scan.planFiles.map((f) => toPosixPath(node_path_1.default.join(phaseRel, f)));
+    output({
+        phase: phaseNum,
+        phase_dir: phaseRel,
+        plan_count: scan.planCount,
+        has_plans: scan.planCount > 0,
+        plans,
+    }, raw);
+}
 module.exports = {
     cmdPhasesList,
     cmdPhaseNextDecimal,
@@ -1303,5 +1483,7 @@ module.exports = {
     cmdPhaseInsert,
     cmdPhaseRemove,
     cmdPhaseComplete,
+    cmdPhaseUatPassed,
+    cmdPhaseListPlans,
     computeDependencyLevels,
 };

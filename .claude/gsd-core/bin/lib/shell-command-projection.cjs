@@ -232,6 +232,19 @@ function isManagedHookCommand(commandText, opts = {}) {
     const managedBasenames = managedHookCommandSurfaceSet(surface, includeLegacyAliases);
     if (!managedBasenames || managedBasenames.size === 0)
         return false;
+    // args-form check: the managed hook filename may appear in args[] rather than
+    // in command when a windowless launcher wraps the Node invocation. (#976)
+    // Only treat as managed when an arg basename matches the managed hook set —
+    // prevents false-positives for non-GSD entries that happen to share a path segment.
+    if (Array.isArray(opts.args) && opts.args.length > 0) {
+        for (const arg of opts.args) {
+            if (typeof arg !== 'string')
+                continue;
+            const argBasename = arg.replace(/\\/g, '/').split('/').pop() || '';
+            if (isManagedHookBasename(argBasename, { surface }))
+                return true;
+        }
+    }
     const normalizedCommand = commandText.replace(/\\/g, '/');
     if (typeof opts.configDir === 'string' && opts.configDir.length > 0) {
         const normalizedHooksDir = `${node_path_1.default.join(opts.configDir, 'hooks').replace(/\\/g, '/')}/`;
@@ -333,6 +346,16 @@ function projectPathActionProjection({ mode = 'repair', targetDir, platform = pr
                 label: 'bash',
                 shell: 'bash',
                 command: `echo 'export PATH="${bashTargetDir}:$PATH"' >> ~/.bashrc`,
+            },
+            // #323: fish has no `export`/`$PATH`-list syntax. `fish_add_path` is the
+            // fish-native API (>= fish 3.2, 2021) that persists to the universal
+            // variable store and de-duplicates. The directory is single-quoted with
+            // the same POSIX literal escaping as the zsh/bash siblings — `'\''` is
+            // also a valid escaped single quote in fish between quote spans.
+            {
+                label: 'fish',
+                shell: 'fish',
+                command: `fish_add_path '${bashTargetDir}'`,
             },
         ];
     }
@@ -497,13 +520,49 @@ function normalizeContent(filePath, content, opts = {}) {
     }
     return { content: normalized, encoding };
 }
+// Rename errnos that are transient on Windows: a concurrent reader (or an AV
+// scanner / indexer) holding the target open makes renameSync fail briefly.
+// Same idiom as capability-ledger.cts / capability-consent.cts.
+const RENAME_RETRY_ERRNOS = new Set(['EPERM', 'EBUSY', 'EACCES']);
+const RENAME_MAX_ATTEMPTS = 3;
+const RENAME_RETRY_BACKOFF_MS = 50;
+/** Synchronous best-effort backoff sleep (Atomics.wait — same idiom as io.cts). */
+let _renameSleepBuf = null;
+function renameBackoff() {
+    if (_renameSleepBuf === null)
+        _renameSleepBuf = new Int32Array(new SharedArrayBuffer(4));
+    Atomics.wait(_renameSleepBuf, 0, 0, RENAME_RETRY_BACKOFF_MS);
+}
+/**
+ * Atomic publish with bounded retry on transient Windows lock errnos.
+ * Returns null on success, or the final error if every attempt failed.
+ */
+function atomicRenameWithRetry(tmpPath, filePath) {
+    let renameErr = null;
+    for (let attempt = 1; attempt <= RENAME_MAX_ATTEMPTS; attempt++) {
+        try {
+            node_fs_1.default.renameSync(tmpPath, filePath);
+            return null;
+        }
+        catch (err) {
+            renameErr = err;
+            if (attempt < RENAME_MAX_ATTEMPTS && RENAME_RETRY_ERRNOS.has(renameErr.code ?? '')) {
+                renameBackoff();
+                continue;
+            }
+            break;
+        }
+    }
+    return renameErr;
+}
 function platformWriteSync(filePath, content, opts = {}) {
     const { content: normalized, encoding } = normalizeContent(filePath, content, opts);
     node_fs_1.default.mkdirSync(node_path_1.default.dirname(filePath), { recursive: true });
     const tmpPath = filePath + '.tmp.' + process.pid;
+    // Step 1: write the sibling tmp file. If THIS fails, nothing was published, so a
+    // direct fallback write cannot truncate a concurrent reader of an existing file.
     try {
         node_fs_1.default.writeFileSync(tmpPath, normalized, encoding);
-        node_fs_1.default.renameSync(tmpPath, filePath);
     }
     catch {
         try {
@@ -511,7 +570,25 @@ function platformWriteSync(filePath, content, opts = {}) {
         }
         catch { /* already gone */ }
         node_fs_1.default.writeFileSync(filePath, normalized, encoding);
+        return;
     }
+    // Step 2: atomic publish, retrying transient Windows locks.
+    const renameErr = atomicRenameWithRetry(tmpPath, filePath);
+    if (renameErr === null)
+        return;
+    try {
+        node_fs_1.default.unlinkSync(tmpPath);
+    }
+    catch { /* already gone */ }
+    if (RENAME_RETRY_ERRNOS.has(renameErr.code ?? '')) {
+        // A live reader still holds the target open after every retry. A non-atomic
+        // direct write here would truncate that reader (the exact corruption this seam
+        // exists to prevent), so surface the error instead of falling back.
+        throw renameErr;
+    }
+    // Atomic publish is genuinely impossible here (e.g. EXDEV cross-device move):
+    // fall back to a direct write to preserve write availability.
+    node_fs_1.default.writeFileSync(filePath, normalized, encoding);
 }
 function platformReadSync(filePath, opts = {}) {
     const encoding = opts.encoding ?? 'utf-8';

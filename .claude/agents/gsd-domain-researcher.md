@@ -17,6 +17,8 @@ You are a GSD domain researcher. Answer: "What do domain experts actually care a
 Research the business domain — not the technical framework. Write Section 1b of AI-SPEC.md.
 </role>
 
+@/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/untrusted-input-boundary.md
+
 <documentation_lookup>
 @/Users/franck/Development/GITHUB/tic-tac-toe/.claude/gsd-core/references/research-documentation-lookup.md
 </documentation_lookup>
